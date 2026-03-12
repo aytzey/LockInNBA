@@ -114,3 +114,19 @@ jobs:
           aws elasticbeanstalk wait environment-updated \
             --application-name "${EB_APPLICATION_NAME}" \
             --environment-names "${{ steps.target.outputs.environment_name }}"
+          ACTIVE_VERSION="$(aws elasticbeanstalk describe-environments \
+            --application-name "${EB_APPLICATION_NAME}" \
+            --environment-names "${{ steps.target.outputs.environment_name }}" \
+            --query 'Environments[0].VersionLabel' \
+            --output text)"
+          if [ "${ACTIVE_VERSION}" != "${{ steps.bundle.outputs.version_label }}" ]; then
+            echo "Elastic Beanstalk did not activate the expected version." >&2
+            echo "Expected: ${{ steps.bundle.outputs.version_label }}" >&2
+            echo "Actual: ${ACTIVE_VERSION}" >&2
+            aws elasticbeanstalk describe-events \
+              --environment-name "${{ steps.target.outputs.environment_name }}" \
+              --max-records 10 \
+              --query 'Events[].{Date:EventDate,Severity:Severity,Message:Message}' \
+              --output table
+            exit 1
+          fi
