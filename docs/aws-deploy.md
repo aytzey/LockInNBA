@@ -5,19 +5,21 @@ updated: 2026-03-13
 
 # Amaç
 
-LOCKIN NBA uygulamasini AWS App Runner uzerinde iki ayri ortamla calistirmak:
+LOCKIN NBA uygulamasini AWS Elastic Beanstalk uzerinde iki ayri ortamla calistirmak:
 
 - `main` -> production
 - `dev` -> staging
 
-Her `main` veya `dev` push'unda GitHub Actions Docker image'i ECR'ye gonderir ve ilgili App Runner servisine yeni deployment baslatir.
+Her `main` veya `dev` push'unda GitHub Actions Docker image'i ECR'ye gonderir, branch'e ozel `Dockerrun.aws.json` bundle'i uretir ve ilgili Elastic Beanstalk environment'ina yeni version deploy eder.
 
 # Mimari
 
 - AWS ECR repository: container image kaynagi
-- AWS App Runner `lockin-nba-main`: production servis
-- AWS App Runner `lockin-nba-dev`: staging servis
-- GitHub Actions workflow: [deploy-apprunner.yml](/home/aytzey/Desktop/lockin_nba/.github/workflows/deploy-apprunner.yml)
+- AWS Elastic Beanstalk application: `lockin-nba`
+- AWS Elastic Beanstalk production environment: `main` branch hedefi
+- AWS Elastic Beanstalk staging environment: `dev` branch hedefi
+- AWS ECR repository: container image kaynagi
+- GitHub Actions workflow: [deploy-eb.yml](/home/aytzey/Desktop/lockin_nba/.github/workflows/deploy-eb.yml)
 
 # Branch Kurali
 
@@ -36,13 +38,15 @@ Variables:
 
 - `AWS_REGION`
 - `ECR_REPOSITORY`
-- `APP_RUNNER_SERVICE_ARN_MAIN`
-- `APP_RUNNER_SERVICE_ARN_DEV`
+- `EB_APPLICATION_NAME`
+- `EB_ENVIRONMENT_MAIN`
+- `EB_ENVIRONMENT_DEV`
+- `EB_S3_BUCKET`
 - `LOCKIN_BASE_URL`
 
 # Runtime Env
 
-Her App Runner servisinde en az su env'ler tanimli olmali:
+Her Elastic Beanstalk environment'inda en az su env'ler tanimli olmali:
 
 - `DATABASE_URL`
 - `OPENROUTER_API_KEY`

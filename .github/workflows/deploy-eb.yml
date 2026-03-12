@@ -1,0 +1,114 @@
+name: Deploy Elastic Beanstalk
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      EB_APPLICATION_NAME: ${{ vars.EB_APPLICATION_NAME }}
+      EB_ENVIRONMENT_MAIN: ${{ vars.EB_ENVIRONMENT_MAIN }}
+      EB_ENVIRONMENT_DEV: ${{ vars.EB_ENVIRONMENT_DEV }}
+      EB_S3_BUCKET: ${{ vars.EB_S3_BUCKET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve branch target
+        id: target
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            main)
+              echo "image_tag=main" >> "$GITHUB_OUTPUT"
+              echo "environment_name=${EB_ENVIRONMENT_MAIN}" >> "$GITHUB_OUTPUT"
+              ;;
+            dev)
+              echo "image_tag=dev" >> "$GITHUB_OUTPUT"
+              echo "environment_name=${EB_ENVIRONMENT_DEV}" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported branch: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ -z "${AWS_REGION}" ] || [ -z "${ECR_REPOSITORY}" ] || [ -z "${EB_APPLICATION_NAME}" ] || [ -z "${EB_S3_BUCKET}" ] || [ -z "${environment_name:-}" ]; then
+            echo "Missing Elastic Beanstalk deployment variables." >&2
+            exit 1
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: login-ecr
+
+      - name: Build and push image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.target.outputs.image_tag }}
+        run: |
+          IMAGE_URI="${REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          docker build --pull -t "${IMAGE_URI}" .
+          docker push "${IMAGE_URI}"
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+        id: image
+
+      - name: Create Dockerrun bundle
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.image_uri }}
+        run: |
+          mkdir -p bundle
+          cat > bundle/Dockerrun.aws.json <<EOF
+          {
+            "AWSEBDockerrunVersion": "1",
+            "Image": {
+              "Name": "${IMAGE_URI}",
+              "Update": "true"
+            },
+            "Ports": [
+              {
+                "ContainerPort": "3000"
+              }
+            ]
+          }
+          EOF
+          cd bundle
+          zip -r ../dockerrun.zip Dockerrun.aws.json
+
+      - name: Upload application bundle
+        id: bundle
+        run: |
+          VERSION_LABEL="${GITHUB_REF_NAME}-${GITHUB_SHA::7}"
+          S3_KEY="deployments/${GITHUB_REF_NAME}/${VERSION_LABEL}.zip"
+          aws s3 cp dockerrun.zip "s3://${EB_S3_BUCKET}/${S3_KEY}"
+          echo "version_label=${VERSION_LABEL}" >> "$GITHUB_OUTPUT"
+          echo "s3_key=${S3_KEY}" >> "$GITHUB_OUTPUT"
+
+      - name: Create application version
+        run: |
+          aws elasticbeanstalk create-application-version \
+            --application-name "${EB_APPLICATION_NAME}" \
+            --version-label "${{ steps.bundle.outputs.version_label }}" \
+            --source-bundle S3Bucket="${EB_S3_BUCKET}",S3Key="${{ steps.bundle.outputs.s3_key }}"
+
+      - name: Update environment
+        run: |
+          aws elasticbeanstalk update-environment \
+            --application-name "${EB_APPLICATION_NAME}" \
+            --environment-name "${{ steps.target.outputs.environment_name }}" \
+            --version-label "${{ steps.bundle.outputs.version_label }}"
+          aws elasticbeanstalk wait environment-updated \
+            --application-name "${EB_APPLICATION_NAME}" \
+            --environment-names "${{ steps.target.outputs.environment_name }}"
