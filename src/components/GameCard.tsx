@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import type { Game } from "./types";
 import { formatEstTime, moneyline, isPositiveMoneyline } from "./utils";
 
@@ -21,12 +22,23 @@ function statusBadge(status: Game["status"]): { className: string; label: string
 export default function GameCard({ game, onOpenChat }: GameCardProps) {
   const badge = statusBadge(game.status);
   const isLive = game.status === "live";
+  const cardRef = useRef<HTMLButtonElement>(null);
+
+  function handleMouseMove(e: React.MouseEvent) {
+    const el = cardRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    el.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+    el.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+  }
 
   return (
     <button
+      ref={cardRef}
       type="button"
       onClick={() => onOpenChat(game)}
-      className={`card-lift group relative w-full overflow-hidden rounded-xl border bg-gradient-to-br from-[#111d30] to-[#0d1422] p-4 text-left focus:outline-none focus-ring ${
+      onMouseMove={handleMouseMove}
+      className={`spotlight-card card-lift group relative w-full overflow-hidden rounded-xl border bg-gradient-to-br from-[#111d30] to-[#0d1422] p-4 text-left focus:outline-none focus-ring ${
         isLive
           ? "border-[#ff3b3b]/30 hover:border-[#ff3b3b]/50"
           : "border-[#2a3852]/60 hover:border-[#00c853]/40"
@@ -80,7 +92,7 @@ export default function GameCard({ game, onOpenChat }: GameCardProps) {
         </div>
       )}
 
-      <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-[#00c853] opacity-0 transition-all duration-200 group-hover:opacity-100">
+      <div className="neon-green mt-3 flex items-center justify-center gap-1.5 text-xs text-[#00c853] opacity-0 transition-all duration-200 group-hover:opacity-100">
         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>

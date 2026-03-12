@@ -86,7 +86,7 @@ export default function RestoreAccess({ onRestore }: RestoreAccessProps) {
               type="button"
               onClick={handleRestore}
               disabled={busy}
-              className="rounded-lg bg-gradient-to-r from-[#ff6b35] to-[#e55a25] px-4 py-2 text-sm font-medium text-black transition hover:from-[#ff8a56] hover:to-[#ff6b35] disabled:opacity-50"
+              className="btn-shine rounded-lg bg-gradient-to-r from-[#ff6b35] to-[#e55a25] px-4 py-2 text-sm font-medium text-black transition hover:from-[#ff8a56] hover:to-[#ff6b35] disabled:opacity-50"
             >
               {busy ? (
                 <span className="flex items-center gap-2">

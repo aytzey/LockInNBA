@@ -518,3 +518,191 @@ input:-webkit-autofill {
   background-repeat: repeat;
   background-size: 256px;
 }
+
+/* ══════════════════════════════════════
+   ROTATING GRADIENT BORDER (viral effect)
+   ══════════════════════════════════════ */
+@property --border-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.rotating-border {
+  position: relative;
+  border-radius: 16px;
+}
+
+.rotating-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--border-angle),
+    transparent 25%,
+    rgba(0, 200, 83, 0.5) 35%,
+    rgba(0, 255, 135, 0.6) 50%,
+    rgba(0, 200, 83, 0.5) 65%,
+    transparent 75%
+  );
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  animation: rotateBorder 4s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes rotateBorder {
+  to { --border-angle: 360deg; }
+}
+
+/* ══════════════════════════════════════
+   WAVE FILL BUTTON (hover effect)
+   ══════════════════════════════════════ */
+.btn-wave {
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.btn-wave::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 0%;
+  background: linear-gradient(135deg, rgba(0, 255, 135, 0.15), rgba(0, 200, 83, 0.2));
+  transition: height 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: -1;
+  border-radius: inherit;
+}
+
+.btn-wave:hover::before {
+  height: 100%;
+}
+
+/* ══════════════════════════════════════
+   ODDS FLASH ANIMATION (Bloomberg-style)
+   ══════════════════════════════════════ */
+@keyframes flashGreen {
+  0% { background-color: rgba(0, 200, 83, 0.3); }
+  100% { background-color: transparent; }
+}
+
+@keyframes flashRed {
+  0% { background-color: rgba(255, 59, 59, 0.3); }
+  100% { background-color: transparent; }
+}
+
+.odds-flash-up {
+  animation: flashGreen 0.8s ease-out;
+}
+
+.odds-flash-down {
+  animation: flashRed 0.8s ease-out;
+}
+
+/* ══════════════════════════════════════
+   NEON TEXT GLOW (for stats/numbers)
+   ══════════════════════════════════════ */
+.neon-green {
+  text-shadow:
+    0 0 4px rgba(0, 255, 135, 0.4),
+    0 0 12px rgba(0, 200, 83, 0.2);
+}
+
+.neon-gold {
+  text-shadow:
+    0 0 4px rgba(255, 215, 0, 0.4),
+    0 0 12px rgba(255, 215, 0, 0.2);
+}
+
+/* ══════════════════════════════════════
+   SCROLL REVEAL (progressive enhancement)
+   ══════════════════════════════════════ */
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  animation: fadeIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-timeline: view();
+  animation-range: entry 0% entry 30%;
+}
+
+/* ══════════════════════════════════════
+   HOVER LINE EXPAND (underline effect)
+   ══════════════════════════════════════ */
+.hover-line {
+  position: relative;
+}
+
+.hover-line::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  width: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--money-green), transparent);
+  transition: width 0.3s ease, left 0.3s ease;
+}
+
+.hover-line:hover::after {
+  width: 80%;
+  left: 10%;
+}
+
+/* ══════════════════════════════════════
+   SPOTLIGHT CURSOR FOLLOW (card effect)
+   ══════════════════════════════════════ */
+.spotlight-card {
+  --mouse-x: 50%;
+  --mouse-y: 50%;
+  position: relative;
+  overflow: hidden;
+}
+
+.spotlight-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    300px circle at var(--mouse-x) var(--mouse-y),
+    rgba(0, 200, 83, 0.06),
+    transparent 70%
+  );
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.spotlight-card:hover::after {
+  opacity: 1;
+}
+
+/* ══════════════════════════════════════
+   TYPEWRITER / COUNTER ANIMATION
+   ══════════════════════════════════════ */
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(8px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.count-up {
+  animation: countUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ══════════════════════════════════════
+   ACCESSIBILITY: REDUCED MOTION
+   ══════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
