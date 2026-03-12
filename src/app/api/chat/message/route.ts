@@ -11,8 +11,14 @@ import {
 } from "@/lib/store";
 import { getEstDateKey } from "@/lib/time";
 import { parseBearerToken, verifyAccessToken } from "@/lib/token";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for") || "unknown";
+  if (!checkRateLimit(`chat:${ip}`, 20, 60_000)) {
+    return NextResponse.json({ message: "Too many requests. Please slow down." }, { status: 429 });
+  }
+
   const body = await request.json().catch(() => null);
   const sessionId = (body?.sessionId || "") as string;
   const question = (body?.message || "").toString().trim();
