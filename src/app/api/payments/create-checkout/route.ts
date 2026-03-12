@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createCheckoutSession, getTodayPrediction } from "@/lib/store";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  const ip = request.headers.get("x-forwarded-for") || "unknown";
+  if (!checkRateLimit(`checkout:${ip}`, 10, 60_000)) {
+    return NextResponse.json({ message: "Too many requests. Please slow down." }, { status: 429 });
+  }
+
+  const body = await request.json().catch(() => null);
+  if (!body) {
+    return NextResponse.json({ message: "Invalid request body" }, { status: 400 });
+  }
   const email = (body?.email || "").toLowerCase().trim();
   const type = body?.type;
   const gameId = body?.gameId;
