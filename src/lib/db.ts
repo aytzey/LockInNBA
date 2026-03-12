@@ -204,6 +204,30 @@ async function runSchemaSetup(): Promise<void> {
      WHERE NOT EXISTS (SELECT 1 FROM system_prompts)`,
     [DEFAULT_SYSTEM_PROMPT],
   );
+
+  const appTables = [
+    "predictions",
+    "social_proof_banner",
+    "system_prompts",
+    "games",
+    "chat_sessions",
+    "chat_messages",
+    "checkout_sessions",
+    "payments",
+    "magic_links",
+    "data_refresh_state",
+  ];
+
+  for (const table of appTables) {
+    await pool.query(`ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY`);
+    await pool.query(`REVOKE ALL ON TABLE "${table}" FROM anon, authenticated`);
+  }
+
+  // New tables created by this bootstrap should stay closed to the public Data API
+  // unless we explicitly grant access later.
+  await pool.query(
+    `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated`,
+  );
 }
 
 async function ensureSchema(): Promise<void> {

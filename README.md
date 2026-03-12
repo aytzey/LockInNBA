@@ -47,6 +47,7 @@ Open `http://localhost:3000`.
 Supabase Postgres is used for persistence. The app bootstraps its own tables on first server request with `DATABASE_URL`.
 Use the session pooler URL on `:5432` for the app. Keep the direct `db.<project>.supabase.co:5432` URL only as a fallback or for tools that already have IPv6 egress.
 The app enables SSL itself for Supabase hosts, so the app-level `DATABASE_URL` does not need an explicit `sslmode=require` suffix.
+App tables also enable RLS during bootstrap and revoke `anon` / `authenticated` table grants because the app does not rely on the Supabase Data API.
 
 ## Notes
 

@@ -36,6 +36,9 @@ Not:
 - İlk server isteğinde gerekli tabloları `CREATE TABLE IF NOT EXISTS` ile otomatik açar.
 - Varsayılan sistem prompt'u boş DB'de otomatik seed eder.
 - `src/lib/store.ts` artık tüm read/write işlemlerini Postgres üzerinden async çalıştırır.
+- Uygulama tablolarında bootstrap sırasında RLS açılır.
+- `anon` ve `authenticated` rollerinin app tablolarına tablo seviyesinde erişimi kaldırılır.
+- Uygulama Supabase JS data API kullanmadığı için bu kısıtlama backend akışını bozmaz; app doğrudan Postgres bağlantısı kullanır.
 
 # Oluşturulan Tablolar
 
