@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
+import CountUp from "react-countup";
 import type { Game } from "./types";
 import { formatEstTime, moneyline, isPositiveMoneyline } from "./utils";
 
@@ -23,6 +24,19 @@ export default function GameCard({ game, onOpenChat }: GameCardProps) {
   const badge = statusBadge(game.status);
   const isLive = game.status === "live";
   const cardRef = useRef<HTMLButtonElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const setCardRef = (el: HTMLButtonElement | null) => {
+    (cardRef as React.MutableRefObject<HTMLButtonElement | null>).current = el;
+    if (!el) return;
+    if (observerRef.current) observerRef.current.disconnect();
+    observerRef.current = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); observerRef.current?.disconnect(); } },
+      { threshold: 0.3 }
+    );
+    observerRef.current.observe(el);
+  };
 
   function handleMouseMove(e: React.MouseEvent) {
     const el = cardRef.current;
@@ -34,7 +48,7 @@ export default function GameCard({ game, onOpenChat }: GameCardProps) {
 
   return (
     <button
-      ref={cardRef}
+      ref={setCardRef}
       type="button"
       onClick={() => onOpenChat(game)}
       onMouseMove={handleMouseMove}
@@ -76,19 +90,45 @@ export default function GameCard({ game, onOpenChat }: GameCardProps) {
       <div className="grid grid-cols-2 gap-2">
         <div className={`mono flex items-center justify-between rounded-lg border border-white/[0.04] bg-black/20 px-3 py-2.5 text-sm transition-colors group-hover:border-white/[0.08] ${isPositiveMoneyline(game.awayMoneyline) ? "text-[#ff6b35]" : "text-[#00c853]"}`}>
           <span className="text-xs text-[#8b92a5]">{game.awayTeam}</span>
-          <span className="number-pop font-medium">{moneyline(game.awayMoneyline)}</span>
+          <span className="number-pop font-medium">
+            {visible ? (
+              <CountUp
+                start={0}
+                end={Math.abs(game.awayMoneyline)}
+                duration={1.2}
+                prefix={game.awayMoneyline >= 0 ? "+" : "-"}
+                useEasing
+              />
+            ) : moneyline(game.awayMoneyline)}
+          </span>
         </div>
         <div className={`mono flex items-center justify-between rounded-lg border border-white/[0.04] bg-black/20 px-3 py-2.5 text-sm transition-colors group-hover:border-white/[0.08] ${isPositiveMoneyline(game.homeMoneyline) ? "text-[#ff6b35]" : "text-[#00c853]"}`}>
           <span className="text-xs text-[#8b92a5]">{game.homeTeam}</span>
-          <span className="number-pop font-medium">{moneyline(game.homeMoneyline)}</span>
+          <span className="number-pop font-medium">
+            {visible ? (
+              <CountUp
+                start={0}
+                end={Math.abs(game.homeMoneyline)}
+                duration={1.2}
+                prefix={game.homeMoneyline >= 0 ? "+" : "-"}
+                useEasing
+              />
+            ) : moneyline(game.homeMoneyline)}
+          </span>
         </div>
       </div>
 
       {game.status === "final" && game.awayScore !== null && game.homeScore !== null && (
         <div className="mt-3 flex items-center justify-center gap-4 rounded-lg bg-white/[0.02] py-2 text-xs">
-          <span className="mono font-medium text-white">{game.awayTeam} {game.awayScore}</span>
+          <span className="mono font-medium text-white">
+            {game.awayTeam}{" "}
+            {visible ? <CountUp end={game.awayScore!} duration={1.5} useEasing /> : game.awayScore}
+          </span>
           <span className="text-[#8b92a5]">-</span>
-          <span className="mono font-medium text-white">{game.homeTeam} {game.homeScore}</span>
+          <span className="mono font-medium text-white">
+            {game.homeTeam}{" "}
+            {visible ? <CountUp end={game.homeScore!} duration={1.5} useEasing /> : game.homeScore}
+          </span>
         </div>
       )}
 

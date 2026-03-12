@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import toast from "react-hot-toast";
 import { validateEmail, DAILY_TOKEN_KEY } from "./utils";
 
 interface RestoreAccessProps {
@@ -44,9 +45,11 @@ export default function RestoreAccess({ onRestore }: RestoreAccessProps) {
       await onRestore(verifyBody.accessToken);
       setMessage("Access restored successfully!");
       setIsError(false);
+      toast.success("Access restored!");
     } catch {
       setMessage("Could not restore access. Please try again.");
       setIsError(true);
+      toast.error("Restore failed. Try again.");
     } finally {
       setBusy(false);
     }

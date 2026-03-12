@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import toast from "react-hot-toast";
 import type { TodayPrediction } from "./types";
 import { formatEstDate, validateEmail, DAILY_TOKEN_KEY } from "./utils";
 import { createCheckout, finalizeCheckout } from "./api";
@@ -53,6 +55,7 @@ export default function TonightsEdge({
       const token = await finalizeCheckout(checkout.sessionId);
       window.localStorage.setItem(DAILY_TOKEN_KEY, token);
       await onUnlock(token);
+      toast.success("Daily edge unlocked!");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Payment failed");
     } finally {
@@ -130,57 +133,79 @@ export default function TonightsEdge({
               </div>
             </div>
 
-            {!dailyUnlocked ? (
-              <div className="space-y-3">
-                <input
-                  value={dailyEmail}
-                  onChange={(e) => setDailyEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCheckout()}
-                  className="input-field w-full"
-                  placeholder="you@email.com"
-                  type="email"
-                />
-                <button
-                  type="button"
-                  onClick={handleCheckout}
-                  disabled={unlocking}
-                  className="btn-glow btn-shine w-full rounded-xl bg-gradient-to-r from-[#00c853] to-[#00b848] px-4 py-3.5 text-lg font-bold text-[#0a0e1a] transition hover:from-[#00ff87] hover:to-[#00c853] disabled:cursor-not-allowed disabled:opacity-60"
+            <AnimatePresence mode="wait">
+              {!dailyUnlocked ? (
+                <motion.div
+                  key="paywall"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-3"
                 >
-                  {unlocking ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-black/30 border-t-black" />
-                      Processing...
-                    </span>
-                  ) : (
-                    "Unlock Today's Edge — $5"
-                  )}
-                </button>
-                <p className="text-center text-[11px] text-[#8b92a5]">
-                  One-time daily access &middot; Full markdown analysis &middot; Shareable insight card
-                </p>
-              </div>
-            ) : (
-              <div className="fade-in rounded-xl border border-[#00c853]/20 bg-gradient-to-br from-[#00c853]/[0.04] to-transparent p-5">
-                <div className="mb-4 flex items-center gap-2">
-                  <span className="glow-dot" />
-                  <span className="heading text-sm font-semibold text-[#00ff87]">Daily edge unlocked</span>
-                </div>
-                <MarkdownContent content={dailyMarkdown} />
-                <div className="mt-5 flex gap-2">
-                  <button
+                  <input
+                    value={dailyEmail}
+                    onChange={(e) => setDailyEmail(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleCheckout()}
+                    className="input-field w-full"
+                    placeholder="you@email.com"
+                    type="email"
+                  />
+                  <motion.button
                     type="button"
-                    onClick={onShare}
-                    disabled={isShareBusy}
-                    className="btn-wave flex items-center gap-1.5 rounded-lg border border-[#00c853]/30 px-4 py-2 text-sm text-[#00ff87] transition hover:bg-[#00c853]/10"
+                    onClick={handleCheckout}
+                    disabled={unlocking}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="btn-glow btn-shine w-full rounded-xl bg-gradient-to-r from-[#00c853] to-[#00b848] px-4 py-3.5 text-lg font-bold text-[#0a0e1a] transition hover:from-[#00ff87] hover:to-[#00c853] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                    </svg>
-                    {isShareBusy ? "Generating..." : "Share your edge"}
-                  </button>
-                </div>
-              </div>
-            )}
+                    {unlocking ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <motion.span
+                          className="inline-block h-5 w-5 rounded-full border-2 border-black/30 border-t-black"
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                        />
+                        Processing...
+                      </span>
+                    ) : (
+                      "Unlock Today's Edge — $5"
+                    )}
+                  </motion.button>
+                  <p className="text-center text-[11px] text-[#8b92a5]">
+                    One-time daily access &middot; Full markdown analysis &middot; Shareable insight card
+                  </p>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="unlocked"
+                  initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                  className="rounded-xl border border-[#00c853]/20 bg-gradient-to-br from-[#00c853]/[0.04] to-transparent p-5"
+                >
+                  <div className="mb-4 flex items-center gap-2">
+                    <span className="glow-dot" />
+                    <span className="heading text-sm font-semibold text-[#00ff87]">Daily edge unlocked</span>
+                  </div>
+                  <MarkdownContent content={dailyMarkdown} />
+                  <div className="mt-5 flex gap-2">
+                    <motion.button
+                      type="button"
+                      onClick={onShare}
+                      disabled={isShareBusy}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      className="btn-wave flex items-center gap-1.5 rounded-lg border border-[#00c853]/30 px-4 py-2 text-sm text-[#00ff87] transition hover:bg-[#00c853]/10"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                      </svg>
+                      {isShareBusy ? "Generating..." : "Share your edge"}
+                    </motion.button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
             {error && (
               <p className="mt-3 rounded-lg border border-[#ff3b3b]/20 bg-[#ff3b3b]/[0.06] px-4 py-2 text-sm text-[#ff3b3b]">{error}</p>
             )}
