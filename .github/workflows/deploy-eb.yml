@@ -27,12 +27,12 @@ jobs:
         run: |
           case "${GITHUB_REF_NAME}" in
             main)
+              ENVIRONMENT_NAME="${EB_ENVIRONMENT_MAIN}"
               echo "image_tag=main" >> "$GITHUB_OUTPUT"
-              echo "environment_name=${EB_ENVIRONMENT_MAIN}" >> "$GITHUB_OUTPUT"
               ;;
             dev)
+              ENVIRONMENT_NAME="${EB_ENVIRONMENT_DEV}"
               echo "image_tag=dev" >> "$GITHUB_OUTPUT"
-              echo "environment_name=${EB_ENVIRONMENT_DEV}" >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "Unsupported branch: ${GITHUB_REF_NAME}" >&2
@@ -40,7 +40,9 @@ jobs:
               ;;
           esac
 
-          if [ -z "${AWS_REGION}" ] || [ -z "${ECR_REPOSITORY}" ] || [ -z "${EB_APPLICATION_NAME}" ] || [ -z "${EB_S3_BUCKET}" ] || [ -z "${environment_name:-}" ]; then
+          echo "environment_name=${ENVIRONMENT_NAME}" >> "$GITHUB_OUTPUT"
+
+          if [ -z "${AWS_REGION}" ] || [ -z "${ECR_REPOSITORY}" ] || [ -z "${EB_APPLICATION_NAME}" ] || [ -z "${EB_S3_BUCKET}" ] || [ -z "${ENVIRONMENT_NAME}" ]; then
             echo "Missing Elastic Beanstalk deployment variables." >&2
             exit 1
           fi
