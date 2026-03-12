@@ -53,7 +53,7 @@ Not:
 
 - `/api/internal/live-sync` ESPN'den slate çeker.
 - Günlük tahmini yeniler.
-- Sonuçlar Supabase'e yazıldığı için scheduler çıktısı restart sonrasında da korunur.
+- Sonuçlar Supabase'e yazıldığı için backend self-refresh çıktısı restart sonrasında da korunur.
 
 # Doğrulama
 

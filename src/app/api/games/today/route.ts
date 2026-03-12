@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
-import { syncTodayGames } from "@/lib/daily-edge";
+import { getFreshGames } from "@/lib/daily-edge";
 import { getEstDateKey } from "@/lib/time";
 
 export async function GET() {
   const date = getEstDateKey();
-  const games = await syncTodayGames(date);
+  const result = await getFreshGames(date);
   return NextResponse.json({
     date,
-    games,
+    games: result.games,
+    updatedAt: result.updatedAt,
+    refreshed: result.refreshed,
   });
 }

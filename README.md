@@ -8,6 +8,8 @@ LOCKIN is a Next.js app that surfaces a paid daily NBA moneyline edge and paid p
 - The default model is `google/gemini-3.1-flash-lite-preview`.
 - The NBA slate, scores and book lines are pulled from ESPN's live scoreboard feed.
 - The homepage and matchup chat both consume the same live game context.
+- Production runs on `https://lockinpicks.com`.
+- `https://www.lockinpicks.com` is also active over HTTPS.
 
 ## Environment
 
@@ -54,10 +56,12 @@ The app enables SSL itself for Supabase hosts, so the app-level `DATABASE_URL` d
 
 ## Continuous Sync
 
-- A protected sync endpoint now exists at `/api/internal/live-sync`.
-- It refreshes ESPN slate data and re-generates only `auto` daily predictions.
-- Admin-written daily predictions are not overwritten by the sync job.
-- A ready-to-use GitHub Actions scheduler lives at [`.github/workflows/live-data-sync.yml`](/home/aytzey/Desktop/lockin_nba/.github/workflows/live-data-sync.yml).
+- Supabase Postgres is the source of truth for games and predictions.
+- The backend now refreshes live ESPN slate data on demand when cached DB data becomes stale.
+- `live` games refresh fastest, `upcoming` slates refresh more slowly, and completed boards back off automatically.
+- Daily predictions are still regenerated only for `source: "auto"` rows.
+- Admin-written daily predictions are not overwritten by automatic refreshes.
+- A protected manual sync endpoint still exists at `/api/internal/live-sync`.
 - Full setup notes live in [`docs/live-data-sync.md`](/home/aytzey/Desktop/lockin_nba/docs/live-data-sync.md).
 - Supabase persistence notes live in [`docs/supabase-postgres.md`](/home/aytzey/Desktop/lockin_nba/docs/supabase-postgres.md).
 - AWS deploy notes live in [`docs/aws-deploy.md`](/home/aytzey/Desktop/lockin_nba/docs/aws-deploy.md).

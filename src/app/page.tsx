@@ -109,7 +109,7 @@ export default function HomePage() {
         if (pBody) setTodayPrediction(pBody);
         if (gBody?.games) setGames(gBody.games);
         setSocialProof(bBody?.text || "");
-        setLastUpdatedAt(new Date().toISOString());
+        setLastUpdatedAt(gBody?.updatedAt || new Date().toISOString());
 
         const savedToken = window.localStorage.getItem(DAILY_TOKEN_KEY);
         if (savedToken) {

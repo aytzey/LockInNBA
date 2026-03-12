@@ -1,7 +1,15 @@
 import { getOptionalEnv } from "./env";
 import { generateDailyPrediction } from "./llm";
 import { fetchTodayGames } from "./nba";
-import { getActiveSystemPrompt, getGames, getTodayPrediction, savePrediction, setGames } from "./store";
+import {
+  getActiveSystemPrompt,
+  getGames,
+  getGamesRefreshState,
+  getTodayPrediction,
+  savePrediction,
+  setGames,
+  touchGamesRefreshState,
+} from "./store";
 import { getEstDateKey } from "./time";
 import { DailyPrediction, Game } from "./types";
 
@@ -9,6 +17,26 @@ const AUTO_PREDICTION_REFRESH_MS = Math.max(
   60,
   Number.parseInt(getOptionalEnv("LOCKIN_AUTO_PREDICTION_REFRESH_SECONDS") || "1800", 10) || 1800,
 ) * 1000;
+const LIVE_GAMES_REFRESH_MS = 60 * 1000;
+const UPCOMING_GAMES_REFRESH_MS = 5 * 60 * 1000;
+const FINAL_GAMES_REFRESH_MS = 15 * 60 * 1000;
+const EMPTY_SLATE_REFRESH_MS = 30 * 60 * 1000;
+
+declare global {
+  var __lockinGamesRefreshJobs: Map<string, Promise<{
+    games: Game[];
+    updatedAt: string | null;
+    refreshed: boolean;
+  }>> | undefined;
+}
+
+function getGamesRefreshJobs() {
+  if (!globalThis.__lockinGamesRefreshJobs) {
+    globalThis.__lockinGamesRefreshJobs = new Map();
+  }
+
+  return globalThis.__lockinGamesRefreshJobs;
+}
 
 function hasPredictionContent(prediction: DailyPrediction): boolean {
   return prediction.teaserText.trim().length > 0 && (prediction.markdownContent.trim().length > 0 || prediction.isNoEdgeDay);
@@ -35,14 +63,96 @@ function shouldRefreshPrediction(prediction: DailyPrediction, forcePrediction: b
   return (Date.now() - updatedAt) >= AUTO_PREDICTION_REFRESH_MS;
 }
 
-export async function syncTodayGames(date = getEstDateKey()): Promise<Game[]> {
-  try {
-    const games = await fetchTodayGames(date);
-    await setGames(date, games);
-    return games;
-  } catch {
-    return getGames(date);
+function getGamesRefreshWindowMs(date: string, games: Game[]): number {
+  if (games.length === 0) {
+    return EMPTY_SLATE_REFRESH_MS;
   }
+
+  if (games.some((game) => game.status === "live")) {
+    return LIVE_GAMES_REFRESH_MS;
+  }
+
+  if (games.some((game) => game.status === "upcoming")) {
+    return date === getEstDateKey() ? UPCOMING_GAMES_REFRESH_MS : EMPTY_SLATE_REFRESH_MS;
+  }
+
+  return FINAL_GAMES_REFRESH_MS;
+}
+
+function shouldRefreshGames(
+  date: string,
+  games: Game[],
+  lastUpdatedAt: string | null,
+  forceRefresh: boolean,
+): boolean {
+  if (forceRefresh) {
+    return true;
+  }
+
+  if (!lastUpdatedAt) {
+    return true;
+  }
+
+  const updatedAt = new Date(lastUpdatedAt).getTime();
+  if (Number.isNaN(updatedAt)) {
+    return true;
+  }
+
+  return (Date.now() - updatedAt) >= getGamesRefreshWindowMs(date, games);
+}
+
+export async function getFreshGames(date = getEstDateKey(), forceRefresh = false): Promise<{
+  games: Game[];
+  updatedAt: string | null;
+  refreshed: boolean;
+}> {
+  const cachedGames = await getGames(date);
+  const refreshState = await getGamesRefreshState(date);
+  const lastUpdatedAt = refreshState?.updatedAt ?? null;
+
+  if (!shouldRefreshGames(date, cachedGames, lastUpdatedAt, forceRefresh)) {
+    return {
+      games: cachedGames,
+      updatedAt: lastUpdatedAt,
+      refreshed: false,
+    };
+  }
+
+  const cacheKey = `${date}:${forceRefresh ? "force" : "stale"}`;
+  const jobs = getGamesRefreshJobs();
+  const inFlight = jobs.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const job = (async () => {
+    try {
+      const games = await fetchTodayGames(date);
+      await setGames(date, games);
+      const nextState = await touchGamesRefreshState(date);
+      return {
+        games,
+        updatedAt: nextState.updatedAt,
+        refreshed: true,
+      };
+    } catch {
+      return {
+        games: cachedGames,
+        updatedAt: lastUpdatedAt,
+        refreshed: false,
+      };
+    } finally {
+      jobs.delete(cacheKey);
+    }
+  })();
+
+  jobs.set(cacheKey, job);
+  return job;
+}
+
+export async function syncTodayGames(date = getEstDateKey(), forceRefresh = false): Promise<Game[]> {
+  const result = await getFreshGames(date, forceRefresh);
+  return result.games;
 }
 
 export async function refreshPredictionForDate(date = getEstDateKey(), forcePrediction = false): Promise<{
@@ -50,7 +160,7 @@ export async function refreshPredictionForDate(date = getEstDateKey(), forcePred
   refreshed: boolean;
   games: Game[];
 }> {
-  const games = await syncTodayGames(date);
+  const { games } = await getFreshGames(date);
   const existing = await getTodayPrediction(date);
 
   if (!shouldRefreshPrediction(existing, forcePrediction)) {
@@ -98,10 +208,11 @@ export async function refreshLiveData(dates: string[], forcePrediction = false):
   const results = [];
 
   for (const date of uniqueDates) {
-    const { games, prediction, refreshed } = await refreshPredictionForDate(date, forcePrediction);
+    const { games: syncedGames } = await getFreshGames(date, true);
+    const { prediction, refreshed } = await refreshPredictionForDate(date, forcePrediction);
     results.push({
       date,
-      gameCount: games.length,
+      gameCount: syncedGames.length,
       predictionRefreshed: refreshed,
       predictionSource: prediction.source,
       predictionUpdatedAt: prediction.updatedAt,

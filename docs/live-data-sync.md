@@ -5,11 +5,14 @@ updated: 2026-03-12
 
 # Amaç
 
-Bu akış, canlı NBA slate verisini düzenli aralıklarla çekip uygulama isteği gelmeden önce store'u ısıtmak için eklendi.
+Bu akış, canlı NBA slate verisini Supabase üzerinde tutup backend isteği geldiğinde stale kontrolü ile yenilemek için kullanılır.
 
 # Şu Anda Ne Yapıyor
 
 - ESPN scoreboard feed'inden güncel maç, skor, broadcast ve moneyline verisini çeker.
+- Varsayılan çalışma şekli request-driven'dır; ayrı bir cron veya GitHub scheduler gerekmez.
+- Backend önce Supabase'teki son senkron zamanına bakar, veri bayatsa ESPN'den yeniden çeker.
+- `live` maçlar en sık, `upcoming` slate daha seyrek, `final` ve boş günler en seyrek yenilenir.
 - Günlük tahmini yalnızca `source: "auto"` ise yeniler.
 - Admin panelinden yazılmış günlük tahminleri ezmez.
 - İstenirse bugünü ve yarını aynı çağrıda senkronize eder.
@@ -37,47 +40,12 @@ curl --fail \
   "https://your-domain.com/api/internal/live-sync?includeTomorrow=true"
 ```
 
-# GitHub Actions ile 5 Dakikada Bir Çekme
+# Çalışma Modeli
 
-Repo içinde hazır workflow dosyası vardır:
-
-- [live-data-sync.yml](/home/aytzey/Desktop/lockin_nba/.github/workflows/live-data-sync.yml)
-
-GitHub ayarları:
-
-1. Repository secret: `LOCKIN_SYNC_SECRET`
-2. Repository variable: `LOCKIN_BASE_URL`
-
-Workflow her 5 dakikada bir endpoint'i vurur. Secret veya base URL yoksa sessizce skip eder.
-
-# Vercel Cron Alternatifi
-
-Vercel kullanıyorsan aynı endpoint cron ile de tetiklenebilir. `CRON_SECRET` tanımlandığında Vercel cron isteklerini `Authorization: Bearer <CRON_SECRET>` ile yollar.
-
-Örnek `vercel.json`:
-
-```json
-{
-  "crons": [
-    {
-      "path": "/api/internal/live-sync?includeTomorrow=true",
-      "schedule": "*/10 * * * *"
-    }
-  ]
-}
-```
-
-Not:
-
-- Vercel cron sıklığı plan limitlerine bağlıdır.
-- Veriler artık Supabase Postgres'e yazıldığı için process restart sonrasında sync sonucu kaybolmaz.
-- Bu yüzden scheduler artık sadece cache warm değil, kalıcı veri güncellemesi de yapar.
-
-# Referans Dokümanlar
-
-- Vercel Cron Jobs: https://vercel.com/docs/cron-jobs
-- Vercel cron security (`CRON_SECRET`): https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs
-- GitHub Actions schedule: https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule
+- Homepage `/api/predictions/today` ve `/api/games/today` çağrılarında backend stale kontrolü yapar.
+- Chat tarafı soru geldiğinde aynı stale-aware oyun senkronizasyonunu tekrar kullanır.
+- Bu yüzden ayrı GitHub Actions cron'u olmadan da güncel maç verisi akmaya devam eder.
+- `GET /api/internal/live-sync` artık sadece manuel veya admin amaçlı force-refresh aracıdır.
 
 # İlgili Dosyalar
 

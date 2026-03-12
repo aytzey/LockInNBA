@@ -113,6 +113,13 @@ async function runSchemaSetup(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_games_date ON games (date)`);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS data_refresh_state (
+      key TEXT PRIMARY KEY,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id TEXT PRIMARY KEY,
       game_id TEXT NOT NULL,

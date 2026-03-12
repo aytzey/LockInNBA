@@ -61,7 +61,7 @@ Bu dosya, PRD V1.2 için yapılan son ilerlemeyi ve bir sonraki adımları sakla
 - Stripe Checkout gerçek canlı entegrasyon henüz mock akışında.
 - OpenRouter `google/gemini-3.1-flash-lite-preview` canlı çağrısı aktif; hata durumunda deterministik fallback cevabı var.
 - Kalıcı veri katmanı Supabase Postgres üzerinden çalışıyor; schema ilk server erişiminde otomatik bootstrap ediliyor.
-- Korumalı live-sync endpoint ve scheduler örneği eklendi; auto prediction yenilemesi admin override’larını ezmiyor.
+- Korumalı live-sync endpoint korundu; canlı maç verisi artık GitHub scheduler yerine backend self-refresh ile yenileniyor ve auto prediction yenilemesi admin override’larını ezmiyor.
 
 ## Son Doğrulamalar
 

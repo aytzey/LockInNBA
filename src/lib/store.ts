@@ -22,6 +22,11 @@ interface CheckoutSession {
   createdAt: string;
 }
 
+interface DataRefreshState {
+  key: string;
+  updatedAt: string;
+}
+
 type RowValue = string | number | boolean | Date | null | undefined;
 
 function toIsoString(value: RowValue): string {
@@ -150,6 +155,13 @@ function mapCheckoutSession(row: Record<string, RowValue>): CheckoutSession {
     chatSessionId: row.chat_session_id ? String(row.chat_session_id) : undefined,
     status: row.status === "paid" ? "paid" : "pending",
     createdAt: toIsoString(row.created_at),
+  };
+}
+
+function mapDataRefreshState(row: Record<string, RowValue>): DataRefreshState {
+  return {
+    key: String(row.key),
+    updatedAt: toIsoString(row.updated_at),
   };
 }
 
@@ -401,6 +413,19 @@ export async function getGames(date = getEstDateKey()): Promise<Game[]> {
   return result.rows.map((row) => mapGame(row as Record<string, RowValue>));
 }
 
+export async function getGamesRefreshState(date = getEstDateKey()): Promise<DataRefreshState | null> {
+  const result = await query(
+    `SELECT * FROM data_refresh_state WHERE key = $1 LIMIT 1`,
+    [`games:${date}`],
+  );
+
+  if (!result.rows[0]) {
+    return null;
+  }
+
+  return mapDataRefreshState(result.rows[0] as Record<string, RowValue>);
+}
+
 export async function setGames(date: string, games: Game[]): Promise<void> {
   await withTransaction(async (client) => {
     await client.query(`DELETE FROM games WHERE date = $1`, [date]);
@@ -469,6 +494,19 @@ export async function setGames(date: string, games: Game[]): Promise<void> {
       );
     }
   });
+}
+
+export async function touchGamesRefreshState(date: string): Promise<DataRefreshState> {
+  const result = await query(
+    `INSERT INTO data_refresh_state (key, updated_at)
+     VALUES ($1, NOW())
+     ON CONFLICT (key) DO UPDATE
+       SET updated_at = NOW()
+     RETURNING *`,
+    [`games:${date}`],
+  );
+
+  return mapDataRefreshState(result.rows[0] as Record<string, RowValue>);
 }
 
 export async function createChatSession(gameId: string): Promise<ChatSession> {

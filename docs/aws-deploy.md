@@ -20,8 +20,32 @@ Workflow deploy sonunda aktif Elastic Beanstalk `VersionLabel` degerini kontrol 
 - AWS Elastic Beanstalk application: `lockin-nba`
 - AWS Elastic Beanstalk production environment: `main` branch hedefi
 - AWS Elastic Beanstalk staging environment: `dev` branch hedefi
-- AWS ECR repository: container image kaynagi
+- AWS CloudFront distribution: `lockinpicks.com` ve `www.lockinpicks.com` icin HTTPS edge katmani
+- AWS Route53 hosted zone: `lockinpicks.com`
 - GitHub Actions workflow: [deploy-eb.yml](/home/aytzey/Desktop/lockin_nba/.github/workflows/deploy-eb.yml)
+
+# Aktif URL'ler
+
+- Production: `https://lockinpicks.com`
+- Production alternate: `https://www.lockinpicks.com`
+- Elastic Beanstalk origin: `http://lockin-main.us-east-1.elasticbeanstalk.com`
+- Staging: `http://lockin-dev.us-east-1.elasticbeanstalk.com`
+
+# Registrar Kesimi
+
+GoDaddy registrar tarafinda nameserver'lar Route53 hosted zone'a cevrildi:
+
+- `ns-1048.awsdns-03.org`
+- `ns-582.awsdns-08.net`
+- `ns-1802.awsdns-33.co.uk`
+- `ns-217.awsdns-27.com`
+
+Route53 zone icinde su kayitlar tutulur:
+
+- apex `A` ve `AAAA` alias -> CloudFront
+- `www` `A` ve `AAAA` alias -> CloudFront
+- Mailgun `MX`, `TXT` ve `email` `CNAME` kayitlari
+- ACM validation `CNAME` kayitlari
 
 # Branch Kurali
 
@@ -44,7 +68,6 @@ Variables:
 - `EB_ENVIRONMENT_MAIN`
 - `EB_ENVIRONMENT_DEV`
 - `EB_S3_BUCKET`
-- `LOCKIN_BASE_URL`
 
 # Runtime Env
 
@@ -63,6 +86,11 @@ Her Elastic Beanstalk environment'inda en az su env'ler tanimli olmali:
 - `LOCKIN_TOKEN_SECRET`
 - `LOCKIN_SYNC_SECRET`
 - `LOCKIN_AUTO_PREDICTION_REFRESH_SECONDS`
+
+Production environment su an:
+
+- `NEXT_PUBLIC_APP_URL=https://lockinpicks.com`
+- `OPENROUTER_SITE_URL=https://lockinpicks.com`
 
 # Lokal Duman Testi
 
