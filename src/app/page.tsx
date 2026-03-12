@@ -123,8 +123,11 @@ export default function HomePage() {
   const finalGames = games.filter((g) => g.status === "final");
 
   return (
-    <main className="min-h-screen">
-      <div className="mx-auto flex min-h-screen max-w-6xl flex-col gap-5 px-4 py-6 pb-16 text-sm md:px-8">
+    <main className="noise-overlay min-h-screen">
+      {/* Aurora ambient background */}
+      <div className="aurora-bg" />
+
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col gap-5 px-4 py-6 pb-16 text-sm md:px-8">
         <Header />
 
         <SocialProofBanner text={socialProof} />
@@ -154,10 +157,14 @@ export default function HomePage() {
           {isLoading ? (
             <GameListSkeleton />
           ) : games.length === 0 ? (
-            <div className="rounded-lg border border-[#2a3852] bg-[#101a2c] p-8 text-center">
-              <div className="mb-2 text-3xl">🏀</div>
-              <p className="text-sm text-[#8b92a5]">No games scheduled for today.</p>
-              <p className="mt-1 text-xs text-[#8b92a5]">Check back tomorrow for the next slate.</p>
+            <div className="fade-in overflow-hidden rounded-xl border border-[#2a3852]/40 bg-gradient-to-b from-[#111829] to-[#0d1422] p-10 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#ff6b35]/10 ring-1 ring-[#ff6b35]/20">
+                <svg className="h-8 w-8 text-[#ff6b35]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <p className="heading text-base font-semibold text-white">No games scheduled for today</p>
+              <p className="mt-2 text-sm text-[#8b92a5]">Check back tomorrow for the next slate of NBA action.</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -165,9 +172,9 @@ export default function HomePage() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-xs text-[#ff3b3b]">
                     <span className="live-dot" />
-                    <span className="font-medium uppercase">Live Now</span>
+                    <span className="font-medium uppercase tracking-wider">Live Now</span>
                   </div>
-                  <div className="space-y-3">
+                  <div className="stagger-fade space-y-3">
                     {liveGames.map((game) => (
                       <GameCard key={game.id} game={game} onOpenChat={handleOpenChat} />
                     ))}
@@ -178,9 +185,9 @@ export default function HomePage() {
               {upcomingGames.length > 0 && (
                 <div className="space-y-2">
                   {liveGames.length > 0 && (
-                    <div className="text-xs font-medium uppercase text-[#8b92a5]">Upcoming</div>
+                    <div className="text-xs font-medium uppercase tracking-wider text-[#8b92a5]">Upcoming</div>
                   )}
-                  <div className="space-y-3">
+                  <div className="stagger-fade space-y-3">
                     {upcomingGames.map((game) => (
                       <GameCard key={game.id} game={game} onOpenChat={handleOpenChat} />
                     ))}
@@ -190,8 +197,8 @@ export default function HomePage() {
 
               {finalGames.length > 0 && (
                 <div className="space-y-2">
-                  <div className="text-xs font-medium uppercase text-[#8b92a5]">Final</div>
-                  <div className="space-y-3">
+                  <div className="text-xs font-medium uppercase tracking-wider text-[#8b92a5]">Final</div>
+                  <div className="stagger-fade space-y-3">
                     {finalGames.map((game) => (
                       <GameCard key={game.id} game={game} onOpenChat={handleOpenChat} />
                     ))}
