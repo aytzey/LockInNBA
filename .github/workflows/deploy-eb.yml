@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - dev
   workflow_dispatch:
 
 jobs:
@@ -17,7 +16,6 @@ jobs:
       ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
       EB_APPLICATION_NAME: ${{ vars.EB_APPLICATION_NAME }}
       EB_ENVIRONMENT_MAIN: ${{ vars.EB_ENVIRONMENT_MAIN }}
-      EB_ENVIRONMENT_DEV: ${{ vars.EB_ENVIRONMENT_DEV }}
       EB_S3_BUCKET: ${{ vars.EB_S3_BUCKET }}
     steps:
       - uses: actions/checkout@v4
@@ -29,10 +27,6 @@ jobs:
             main)
               ENVIRONMENT_NAME="${EB_ENVIRONMENT_MAIN}"
               echo "image_tag=main" >> "$GITHUB_OUTPUT"
-              ;;
-            dev)
-              ENVIRONMENT_NAME="${EB_ENVIRONMENT_DEV}"
-              echo "image_tag=dev" >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "Unsupported branch: ${GITHUB_REF_NAME}" >&2
@@ -130,3 +124,56 @@ jobs:
               --output table
             exit 1
           fi
+
+      - name: Prune old application versions
+        if: github.ref_name == 'main'
+        env:
+          KEEP_COUNT: "2"
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          app = os.environ["EB_APPLICATION_NAME"]
+          region = os.environ["AWS_REGION"]
+          keep_count = int(os.environ["KEEP_COUNT"])
+          prefix = "main-"
+
+          raw = subprocess.check_output(
+              [
+                  "aws",
+                  "elasticbeanstalk",
+                  "describe-application-versions",
+                  "--application-name",
+                  app,
+                  "--region",
+                  region,
+                  "--output",
+                  "json",
+              ],
+              text=True,
+          )
+          versions = json.loads(raw)["ApplicationVersions"]
+          versions = [v for v in versions if v["VersionLabel"].startswith(prefix)]
+          versions.sort(key=lambda v: v["DateCreated"], reverse=True)
+
+          for version in versions[keep_count:]:
+              label = version["VersionLabel"]
+              subprocess.run(
+                  [
+                      "aws",
+                      "elasticbeanstalk",
+                      "delete-application-version",
+                      "--application-name",
+                      app,
+                      "--region",
+                      region,
+                      "--version-label",
+                      label,
+                      "--delete-source-bundle",
+                  ],
+                  check=True,
+              )
+              print(f"deleted {label}")
+          PY
