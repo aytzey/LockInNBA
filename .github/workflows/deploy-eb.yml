@@ -92,7 +92,7 @@ jobs:
       - name: Upload application bundle
         id: bundle
         run: |
-          VERSION_LABEL="${GITHUB_REF_NAME}-${GITHUB_SHA::7}"
+          VERSION_LABEL="${GITHUB_REF_NAME}-${GITHUB_SHA::7}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           S3_KEY="deployments/${GITHUB_REF_NAME}/${VERSION_LABEL}.zip"
           aws s3 cp dockerrun.zip "s3://${EB_S3_BUCKET}/${S3_KEY}"
           echo "version_label=${VERSION_LABEL}" >> "$GITHUB_OUTPUT"

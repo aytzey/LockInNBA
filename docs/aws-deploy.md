@@ -11,6 +11,7 @@ LOCKIN NBA uygulamasini AWS Elastic Beanstalk uzerinde iki ayri ortamla calistir
 - `dev` -> staging
 
 Her `main` veya `dev` push'unda GitHub Actions Docker image'i ECR'ye gonderir, branch'e ozel `Dockerrun.aws.json` bundle'i uretir ve ilgili Elastic Beanstalk environment'ina yeni version deploy eder.
+Version label formati `branch-sha-run_id-attempt` oldugu icin workflow rerun veya manuel dispatch durumlarinda da ayni commit yeniden deploy edilebilir.
 
 # Mimari
 
