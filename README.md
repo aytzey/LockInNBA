@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LOCKIN NBA
 
-## Getting Started
+LOCKIN is a Next.js app that surfaces a paid daily NBA moneyline edge and paid per-game AI matchup chat.
 
-First, run the development server:
+## What is live now
+
+- Daily edge generation runs through OpenRouter using `OPENROUTER_MODEL`.
+- The default model is `google/gemini-3.1-flash-lite-preview`.
+- The NBA slate, scores and book lines are pulled from ESPN's live scoreboard feed.
+- The homepage and matchup chat both consume the same live game context.
+
+## Environment
+
+Required environment variables:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+OPENROUTER_API_KEY=...
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_MODEL=google/gemini-3.1-flash-lite-preview
+OPENROUTER_SITE_NAME="LOCKIN NBA"
+DATABASE_URL=postgresql://postgres.YOUR_PROJECT_REF:YOUR_PASSWORD@aws-1-YOUR_REGION.pooler.supabase.com:5432/postgres
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Optional variables already supported elsewhere in the app:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+LOCKIN_ADMIN_USERNAME=...
+LOCKIN_ADMIN_PASSWORD=...
+LOCKIN_ADMIN_SECRET=...
+LOCKIN_TOKEN_SECRET=...
+LOCKIN_SYNC_SECRET=...
+LOCKIN_AUTO_PREDICTION_REFRESH_SECONDS=1800
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Run
 
-## Learn More
+```bash
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Open `http://localhost:3000`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Supabase Postgres is used for persistence. The app bootstraps its own tables on first server request with `DATABASE_URL`.
+Use the session pooler URL on `:5432` for the app. Keep the direct `db.<project>.supabase.co:5432` URL only as a fallback or for tools that already have IPv6 egress.
+The app enables SSL itself for Supabase hosts, so the app-level `DATABASE_URL` does not need an explicit `sslmode=require` suffix.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Notes
 
-## Deploy on Vercel
+- Payments are still completed through the local checkout completion route.
+- Supabase pooler hosts are not always `aws-0`. Check the dashboard for the exact cluster prefix such as `aws-1-<region>.pooler.supabase.com`.
+- The transaction pooler variant is the same host on port `6543`; it is useful for migrations and short-lived CLI jobs.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Continuous Sync
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- A protected sync endpoint now exists at `/api/internal/live-sync`.
+- It refreshes ESPN slate data and re-generates only `auto` daily predictions.
+- Admin-written daily predictions are not overwritten by the sync job.
+- A ready-to-use GitHub Actions scheduler lives at [`.github/workflows/live-data-sync.yml`](/home/aytzey/Desktop/lockin_nba/.github/workflows/live-data-sync.yml).
+- Full setup notes live in [`docs/live-data-sync.md`](/home/aytzey/Desktop/lockin_nba/docs/live-data-sync.md).
+- Supabase persistence notes live in [`docs/supabase-postgres.md`](/home/aytzey/Desktop/lockin_nba/docs/supabase-postgres.md).
+- AWS deploy notes live in [`docs/aws-deploy.md`](/home/aytzey/Desktop/lockin_nba/docs/aws-deploy.md).

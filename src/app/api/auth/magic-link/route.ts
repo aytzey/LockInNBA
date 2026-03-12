@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Valid email required" }, { status: 400 });
   }
 
-  const token = createMagicLink(email);
+  const token = await createMagicLink(email);
   if (!token) {
     return NextResponse.json(
       {
@@ -31,4 +31,3 @@ export async function POST(request: NextRequest) {
     magicLink,
   });
 }
-

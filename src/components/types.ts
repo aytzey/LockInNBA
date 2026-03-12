@@ -1,14 +1,28 @@
 export type Game = {
   id: string;
   awayTeam: string;
+  awayDisplayName: string;
+  awayRecord: string;
+  awayLeader: string;
+  awayLogo: string;
   homeTeam: string;
+  homeDisplayName: string;
+  homeRecord: string;
+  homeLeader: string;
+  homeLogo: string;
   gameTimeEST: string;
   status: "upcoming" | "live" | "final";
+  statusDetail: string;
   awayScore: number | null;
   homeScore: number | null;
   awayMoneyline: number;
   homeMoneyline: number;
   oddsSource: "DraftKings" | "FanDuel" | "BetMGM";
+  spread: string;
+  total: string;
+  broadcast: string;
+  venue: string;
+  gameUrl: string;
 };
 
 export type TodayPrediction = {

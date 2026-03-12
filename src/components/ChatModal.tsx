@@ -13,9 +13,10 @@ interface ChatModalProps {
   onClose: () => void;
   onShareRequest: () => void;
   isShareBusy: boolean;
+  onMessagesChange: (messages: ChatMessage[]) => void;
 }
 
-export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }: ChatModalProps) {
+export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, onMessagesChange }: ChatModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -60,6 +61,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
         setChatSession(session);
         setChatQuestionsRemaining(data.questionsRemaining ?? 0);
         setChatMessages(data.messages ?? []);
+        onMessagesChange(data.messages ?? []);
         setChatEmail(session.email || "");
         const cachedToken = window.localStorage.getItem(`${CHAT_TOKEN_PREFIX}${session.id}`);
         setChatToken(cachedToken || null);
@@ -70,7 +72,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
       }
     }
     initSession();
-  }, [game.id]);
+  }, [game.id, onMessagesChange]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -92,7 +94,11 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
       setChatSession(data.session as ChatSessionState);
       setChatQuestionsRemaining(data.questionsRemaining ?? 0);
     }
-    if (Array.isArray(data.messages)) setChatMessages(data.messages as ChatMessage[]);
+    if (Array.isArray(data.messages)) {
+      const nextMessages = data.messages as ChatMessage[];
+      setChatMessages(nextMessages);
+      onMessagesChange(nextMessages);
+    }
   }
 
   async function ensureChatPaid() {
@@ -153,6 +159,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
       }
       if (!res.ok) throw new Error(data.message || "Chat request failed.");
       setChatMessages(data.messages as ChatMessage[]);
+      onMessagesChange(data.messages as ChatMessage[]);
       setChatQuestionsRemaining(data.questionsRemaining ?? 0);
       setChatInput("");
     } catch (error) {
@@ -175,31 +182,38 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
       animate={{ backgroundColor: "rgba(0,0,0,0.85)" }}
       exit={{ backgroundColor: "rgba(0,0,0,0)" }}
       transition={{ duration: 0.25 }}
-      style={{ backdropFilter: "blur(4px)" }}
+      style={{ backdropFilter: "blur(10px)" }}
     >
       <motion.div
-        className="flex max-h-[95vh] w-full flex-col overflow-hidden rounded-t-2xl border border-[#2a3852]/80 bg-gradient-to-b from-[#0d1422] to-[#0a0e1a] md:max-h-[85vh] md:max-w-2xl md:rounded-2xl"
+        className="flex max-h-[95vh] w-full flex-col overflow-hidden rounded-t-[2rem] border border-[color:var(--line-strong)] bg-[color:var(--panel-strong)] md:max-h-[88vh] md:max-w-3xl md:rounded-[2rem]"
         initial={{ opacity: 0, y: 60, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 40, scale: 0.97 }}
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
       >
-        {/* Header */}
-        <div className="relative flex-shrink-0 border-b border-[#2a3852]/60 bg-gradient-to-r from-[#0f1524] to-[#111d30] px-4 py-4">
-          <div className="absolute bottom-0 left-[15%] right-[15%] h-px bg-gradient-to-r from-transparent via-[#00c853]/20 to-transparent" />
+        <div
+          className="relative flex-shrink-0 border-b border-[color:var(--line)] px-4 py-4 md:px-5"
+          style={{
+            background: "linear-gradient(140deg, color-mix(in oklab, var(--panel-strong) 80%, transparent), color-mix(in oklab, var(--accent-soft) 18%, transparent))",
+          }}
+        >
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <div className="heading flex items-center gap-2 text-lg font-semibold text-white">
-                {game.awayTeam}
-                <span className="text-sm text-[#8b92a5]/60">vs</span>
-                {game.homeTeam}
+              <div className="mb-1 flex items-center gap-2">
+                <p className="section-kicker section-kicker--muted">Matchup chat</p>
                 {game.status === "live" && <span className="live-dot" />}
               </div>
-              <div className="mono mt-1 flex items-center gap-2 text-xs text-[#8b92a5]">
+              <div className="heading flex items-center gap-2 text-xl font-semibold text-white">
+                {game.awayTeam}
+                <span className="text-sm text-[var(--muted)]/60">@</span>
+                {game.homeTeam}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+                <span>{game.statusDetail}</span>
+                <span className="text-[color:var(--line-strong)]">•</span>
                 <span>{formatEstTime(game.gameTimeEST)} EST</span>
-                <span className="text-[#2a3852]">|</span>
+                <span className="text-[color:var(--line-strong)]">•</span>
                 <span>{game.awayTeam} {moneyline(game.awayMoneyline)}</span>
-                <span className="text-[#2a3852]">/</span>
                 <span>{game.homeTeam} {moneyline(game.homeMoneyline)}</span>
               </div>
             </div>
@@ -208,7 +222,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
               onClick={onClose}
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
-              className="ml-3 flex h-8 w-8 items-center justify-center rounded-lg border border-[#2a3852] text-[#8b92a5] transition hover:border-white/20 hover:bg-white/[0.04] hover:text-white"
+              className="ml-3 flex h-9 w-9 items-center justify-center rounded-xl border border-[color:var(--line)] text-[var(--muted)] transition hover:border-[color:var(--line-strong)] hover:bg-white/[0.04] hover:text-white"
               aria-label="Close chat"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -218,7 +232,6 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
           </div>
         </div>
 
-        {/* Messages */}
         <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
           {isInitializing ? (
             <div className="flex flex-col items-center justify-center py-12">
@@ -227,16 +240,16 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
               />
-              <span className="mt-3 text-sm text-[#8b92a5]">Opening chat session...</span>
+              <span className="mt-3 text-sm text-[var(--muted)]">Opening matchup room...</span>
             </div>
           ) : chatMessages.length === 0 ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center justify-center rounded-xl border border-[#2a3852]/40 bg-gradient-to-b from-[#111d30] to-transparent px-6 py-10 text-center"
+              className="flex flex-col items-center justify-center rounded-[1.5rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-6 py-10 text-center"
             >
               <motion.div
-                className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#00c853]/10 text-xl"
+                className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[color:var(--accent-soft)] text-xl"
                 animate={{ scale: [1, 1.05, 1] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
@@ -245,10 +258,10 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
                 </svg>
               </motion.div>
               <p className="mb-1 text-sm font-medium text-white">Ready to analyze this matchup</p>
-              <p className="text-xs text-[#8b92a5]">
+              <p className="max-w-sm text-xs leading-5 text-[var(--muted)]">
                 {isPaid
-                  ? "Type your question below to get AI-powered analysis."
-                  : "Unlock chat for $2 to get 3 AI-powered matchup questions."}
+                  ? "Ask for market read, team shape, risk framing or game-script pressure."
+                  : "Unlock this room for $2 to ask three focused matchup questions."}
               </p>
             </motion.div>
           ) : null}
@@ -259,15 +272,15 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
               initial={{ opacity: 0, y: 12, scale: 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.3, delay: index === chatMessages.length - 1 ? 0.05 : 0 }}
-              className={`rounded-xl p-4 ${
+              className={`rounded-[1.35rem] p-4 ${
                 message.role === "user"
-                  ? "ml-auto max-w-[85%] border border-[#00c853]/15 bg-[#00c853]/[0.06]"
-                  : "border border-[#2a3852]/40 bg-gradient-to-br from-[#111d30] to-[#0d1422]"
+                  ? "ml-auto max-w-[85%] border border-[color:var(--accent-line)] bg-[color:var(--accent-soft)]"
+                  : "border border-[color:var(--line)] bg-[color:var(--panel-soft)]"
               }`}
             >
               <div className="mono mb-2 flex items-center gap-1.5 text-[11px]">
-                <span className={`inline-block h-1.5 w-1.5 rounded-full ${message.role === "user" ? "bg-[#00c853]" : "bg-[#ffd700]"}`} />
-                <span className="text-[#8b92a5]">{message.role === "user" ? "You" : "LOCKIN AI"}</span>
+                <span className={`inline-block h-1.5 w-1.5 rounded-full ${message.role === "user" ? "bg-[color:var(--accent)]" : "bg-[color:var(--amber)]"}`} />
+                <span className="text-[var(--muted)]">{message.role === "user" ? "You" : "LOCKIN AI"}</span>
               </div>
               {message.role === "assistant" ? (
                 <MarkdownContent content={message.content} className="text-sm" />
@@ -281,24 +294,24 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-xl border border-[#2a3852]/40 bg-gradient-to-br from-[#111d30] to-[#0d1422] p-4"
+              className="rounded-[1.35rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] p-4"
             >
               <div className="mono mb-2 flex items-center gap-1.5 text-[11px]">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#ffd700]" />
-                <span className="text-[#8b92a5]">LOCKIN AI</span>
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--amber)]" />
+                <span className="text-[var(--muted)]">LOCKIN AI</span>
               </div>
-              <div className="flex items-center gap-2 text-sm text-[#8b92a5]">
+              <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
                 <div className="flex gap-1">
                   {[0, 1, 2].map((i) => (
                     <motion.span
                       key={i}
-                      className="inline-block h-1.5 w-1.5 rounded-full bg-[#00c853]"
+                      className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--accent)]"
                       animate={{ y: [0, -6, 0] }}
                       transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
                     />
                   ))}
                 </div>
-                Analyzing matchup data...
+                Building the matchup read...
               </div>
             </motion.div>
           )}
@@ -306,26 +319,25 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Footer */}
-        <div className="flex-shrink-0 border-t border-[#2a3852]/60 bg-[#0a0e1a]/80 px-4 py-3">
+        <div className="flex-shrink-0 border-t border-[color:var(--line)] bg-[color:var(--panel)]/95 px-4 py-3">
           {chatError && (
             <motion.p
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              className="mb-2 rounded-lg border border-[#ff3b3b]/20 bg-[#ff3b3b]/[0.06] px-3 py-2 text-xs text-[#ff3b3b]"
+              className="mb-2 rounded-[1rem] border border-[color:var(--signal-red-line)] bg-[color:var(--signal-red-soft)] px-3 py-2 text-xs text-[var(--signal-red)]"
             >
               {chatError}
             </motion.p>
           )}
 
           <div className="mb-2.5 flex items-center justify-between text-xs">
-            <span className="text-[#8b92a5]">
+            <span className="text-[var(--muted)]">
               {chatQuestionsRemaining > 0
                 ? `${chatQuestionsRemaining} question${chatQuestionsRemaining === 1 ? "" : "s"} remaining`
                 : "No questions remaining"}
             </span>
             <span className={`mono rounded-full px-2 py-0.5 text-[10px] font-medium ${
-              isPaid ? "border border-[#00c853]/20 bg-[#00c853]/[0.08] text-[#00c853]" : "border border-[#ff6b35]/20 bg-[#ff6b35]/[0.08] text-[#ff6b35]"
+              isPaid ? "border border-[color:var(--accent-line)] bg-[color:var(--accent-soft)] text-[color:var(--accent-strong)]" : "border border-[color:var(--amber-line)] bg-[color:var(--amber-soft)] text-[color:var(--amber)]"
             }`}>
               {isPaid ? "Active" : "Locked"}
             </span>
@@ -337,22 +349,26 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
               animate={{ opacity: 1, y: 0 }}
               className="mb-3 space-y-2.5"
             >
-              <input
-                value={chatEmail}
-                onChange={(e) => setChatEmail(e.target.value)}
-                className="input-field w-full"
-                placeholder="you@email.com"
-                type="email"
-              />
+              <div className="space-y-2">
+                <label className="input-label" htmlFor="chat-email">Email for unlock and restore</label>
+                <input
+                  id="chat-email"
+                  value={chatEmail}
+                  onChange={(e) => setChatEmail(e.target.value)}
+                  className="input-field w-full"
+                  type="email"
+                  autoComplete="email"
+                />
+              </div>
               {!isPaid ? (
                 <motion.button
                   type="button"
                   onClick={ensureChatPaid}
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.98 }}
-                  className="btn-glow btn-shine w-full rounded-xl bg-gradient-to-r from-[#00c853] to-[#00b848] px-3 py-2.5 text-sm font-semibold text-[#0a0e1a] transition hover:from-[#00ff87] hover:to-[#00c853]"
+                  className="primary-button w-full justify-center"
                 >
-                  Discuss this game with AI — $2
+                  Unlock this matchup room
                 </motion.button>
               ) : (
                 <motion.button
@@ -360,39 +376,47 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
                   onClick={purchaseExtra}
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.98 }}
-                  className="w-full rounded-xl bg-gradient-to-r from-[#ff6b35] to-[#e55a25] px-3 py-2.5 text-sm font-semibold text-black transition hover:from-[#ff8a56] hover:to-[#ff6b35]"
+                  className="secondary-button w-full justify-center"
                 >
-                  +3 more questions — $1
+                  Add 3 more questions
                 </motion.button>
               )}
             </motion.div>
           )}
 
-          <div className="flex gap-2">
-            <input
-              ref={inputRef}
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
-              }}
-              disabled={!canSend}
-              className="input-field flex-1 disabled:opacity-40"
-              placeholder={canSend ? "Ask about this matchup..." : "Unlock chat to ask questions"}
-            />
-            <motion.button
-              type="button"
-              onClick={sendChatMessage}
-              disabled={!canSend || !chatInput.trim()}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#00c853] to-[#00b848] px-4 py-2 text-sm font-semibold text-black transition hover:from-[#00ff87] hover:to-[#00c853] disabled:opacity-30"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-              Send
-            </motion.button>
+          <div className="space-y-2">
+            <label className="input-label" htmlFor="chat-question">Your question</label>
+            <div className="flex gap-2">
+              <input
+                id="chat-question"
+                ref={inputRef}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
+                }}
+                disabled={!canSend}
+                className="input-field flex-1 disabled:opacity-40"
+              />
+              <motion.button
+                type="button"
+                onClick={sendChatMessage}
+                disabled={!canSend || !chatInput.trim()}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="primary-button shrink-0"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+                Send
+              </motion.button>
+            </div>
+            {!canSend && (
+              <p className="text-[11px] text-[var(--muted)]">
+                {isPaid ? "Buy more questions to keep the room active." : "Unlock the room to start asking."}
+              </p>
+            )}
           </div>
 
           {isPaid && chatMessages.length > 0 && (
@@ -402,12 +426,12 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy }
               disabled={isShareBusy}
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.98 }}
-              className="btn-wave mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#00ff87]/20 px-3 py-2 text-xs text-[#00ff87] transition hover:bg-[#00ff87]/[0.05]"
+              className="secondary-button mt-2.5 w-full justify-center"
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
               </svg>
-              {isShareBusy ? "Generating..." : "Share your edge"}
+              {isShareBusy ? "Generating card" : "Export share card"}
             </motion.button>
           )}
         </div>

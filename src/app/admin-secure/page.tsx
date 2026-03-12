@@ -8,6 +8,7 @@ type AdminPrediction = {
   teaserText: string;
   markdownContent: string;
   isNoEdgeDay: boolean;
+  source: "auto" | "admin";
   createdAt: string;
 };
 
@@ -304,7 +305,6 @@ export default function AdminSecurePage() {
                     onChange={(e) => setUsername(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleLogin()}
                     className="input-field w-full"
-                    placeholder="admin"
                   />
                 </div>
                 <div>
@@ -472,23 +472,23 @@ export default function AdminSecurePage() {
 
                 <div className="mt-5">
                   <label className="mb-1.5 block text-xs font-medium text-[#8b92a5]">Teaser Text</label>
+                  <p className="mb-2 text-xs text-[#8b92a5]">Use two short lines. This is the locked preview shown on the homepage.</p>
                   <textarea
                     value={teaserText}
                     onChange={(e) => setTeaserText(e.target.value)}
                     rows={2}
                     className="input-field w-full resize-none"
-                    placeholder="Tonight's top edge: ..."
                   />
                 </div>
 
                 <div className="mt-4">
                   <label className="mb-1.5 block text-xs font-medium text-[#8b92a5]">Prediction Content (Markdown)</label>
+                  <p className="mb-2 text-xs text-[#8b92a5]">Write the full paid report in markdown. Include the lean, support and risk.</p>
                   <textarea
                     value={markdownContent}
                     onChange={(e) => setMarkdownContent(e.target.value)}
                     rows={10}
                     className="input-field mono w-full resize-y text-sm"
-                    placeholder={"## Lock details\n\n- Key stat 1\n- Key stat 2"}
                   />
                 </div>
 
@@ -564,6 +564,13 @@ export default function AdminSecurePage() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <span className="mono text-sm font-medium text-white">{prediction.date}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              prediction.source === "admin"
+                                ? "border border-[#00c853]/30 bg-[#00c853]/10 text-[#00c853]"
+                                : "border border-[#ffd700]/30 bg-[#ffd700]/10 text-[#ffd700]"
+                            }`}>
+                              {prediction.source}
+                            </span>
                             {prediction.isNoEdgeDay && (
                               <span className="rounded-full border border-[#ff6b35]/30 bg-[#ff6b35]/10 px-2 py-0.5 text-[10px] font-medium text-[#ff6b35]">
                                 No Edge
@@ -625,7 +632,6 @@ export default function AdminSecurePage() {
                   onChange={(e) => setSocialProofText(e.target.value)}
                   rows={2}
                   className="input-field mb-4 w-full resize-none"
-                  placeholder="Yesterday: 4-1 (+3.5u) | Last 7 Days: 18-9 (67% Win Rate)"
                 />
 
                 {socialProofText && (
@@ -694,7 +700,6 @@ export default function AdminSecurePage() {
                   onChange={(e) => setPromptText(e.target.value)}
                   rows={6}
                   className="input-field w-full resize-y"
-                  placeholder="Enter the new system prompt content..."
                 />
 
                 <button

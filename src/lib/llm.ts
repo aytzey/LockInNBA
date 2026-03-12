@@ -1,100 +1,225 @@
+import { getEnv, getOptionalEnv } from "./env";
+import { buildDailySlateContext, buildGameContext, buildHeuristicDailyPrediction } from "./nba";
 import { Game } from "./types";
 
-interface BuildPromptInput {
+type ChatRole = "system" | "user" | "assistant";
+
+interface ModelMessage {
+  role: ChatRole;
+  content: string;
+}
+
+interface OpenRouterResponse {
+  choices?: Array<{
+    message?: {
+      content?: OpenRouterContent;
+    };
+  }>;
+}
+
+type OpenRouterContent = string | Array<{ type?: string; text?: string }>;
+
+interface MatchResponseInput {
   question: string;
   game: Game;
-  odds: string;
   predictionText: string;
   unlockedPrediction: boolean;
+  systemPrompt: string;
 }
 
-export function buildModelPrompt({ question, game, odds, predictionText, unlockedPrediction }: BuildPromptInput): string {
-  return `Game: ${game.awayTeam} @ ${game.homeTeam}\n`+
-    `Time: ${new Date(game.gameTimeEST).toISOString()} (EST)\n` +
-    `Odds: Away ML ${oddsFrom(game.awayMoneyline)} | Home ML ${oddsFrom(game.homeMoneyline)}\n` +
-    `Message odds: ${odds}\n` +
-    `Daily unlocked: ${unlockedPrediction ? "true" : "false"}\n` +
-    `System context: ${predictionText || "No unlocked prediction available."}\n` +
-    `User question: ${question}`;
+interface DailyPredictionInput {
+  games: Game[];
+  systemPrompt: string;
 }
 
-function oddsFrom(value: number): string {
-  return value > 0 ? `+${value}` : `${value}`;
+function getOpenRouterConfig() {
+  return {
+    apiKey: getEnv("OPENROUTER_API_KEY"),
+    baseUrl: getEnv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+    model: getEnv("OPENROUTER_MODEL", "google/gemini-3.1-flash-lite-preview"),
+    siteUrl: getOptionalEnv("OPENROUTER_SITE_URL") || getOptionalEnv("NEXT_PUBLIC_APP_URL") || "http://localhost:3000",
+    siteName: getEnv("OPENROUTER_SITE_NAME", "LOCKIN NBA"),
+  };
 }
 
-export function mockAiResponse(prompt: string): string {
-  const seed = Math.abs(hashCode(prompt)) % 6;
-  const responses = [
-    `## Matchup Analysis
-
-Looking at the available data for this game:
-
-- **Pace differential** is the key factor here. The road team ranks above league average in transition efficiency over their last 10 games.
-- **Defensive matchup**: The home team's perimeter defense has been inconsistent, allowing 37%+ from three in 4 of their last 6 games.
-- **Key angle**: Watch the rebounding margin — second-chance points could swing this game.
-
-**Bottom line**: There's a slight lean based on tempo mismatch, but this is a one-unit-max situation. Never chase.`,
-
-    `## Statistical Breakdown
-
-Here's what the numbers tell us:
-
-- **Offensive rating**: Both teams are within 2 points of each other over the last 7 games, making this a close call.
-- **Rest advantage**: Neither team has a significant rest edge tonight.
-- **Home court factor**: The home team is covering at a 58% clip at home this season, which is above league average.
-
-**My take**: The home side has the slight statistical edge, but the margin is thin. If you're playing this, keep it disciplined — standard unit size only.`,
-
-    `## Edge Assessment
-
-Breaking down this matchup by the numbers:
-
-- **Turnover differential** favors the away team — they force 2.3 more turnovers per game than the league average.
-- **Free throw rate**: The home team gets to the line frequently, which could neutralize the turnover edge.
-- **Fourth quarter performance**: The away team has a +3.2 net rating in 4th quarters over their last 8 games.
-
-**Conclusion**: There's a marginal edge on the away side if you trust their ability to close. Use proper bankroll management and don't oversize this play.`,
-
-    `## Game Context Review
-
-Let me walk through the key factors:
-
-- **Back-to-back situation**: Check if either team is on the second night of a back-to-back, as this significantly impacts late-game performance.
-- **Injury report**: Always verify the latest injury updates before committing to any position.
-- **Line movement**: If the line has moved significantly since open, that suggests sharp money has already acted.
-
-**Summary**: The raw matchup data shows a competitive game. Focus on the factors above before making any decisions. Protect your bankroll — this looks like a pass or small-unit play.`,
-
-    `## Detailed Matchup Review
-
-Key data points for tonight:
-
-- **Three-point shooting**: The away team shoots 36.8% from deep, while the home defense allows 35.1%. Not a massive gap, but worth noting.
-- **Paint scoring**: The home team dominates in the paint with +4.2 points per game advantage, suggesting their interior presence is a factor.
-- **Clutch performance**: In games decided by 5 or fewer points, the home team has a 7-3 record this season.
-
-**Assessment**: The home team has a structural advantage in the paint, but the away team's shooting keeps them competitive. This is a coin-flip game — be disciplined with your bankroll.`,
-
-    `## Quick Analysis
-
-Here's my read on this matchup:
-
-- **ATS trend**: The underdog has covered in 4 of the last 5 meetings between these teams.
-- **Total trend**: The over has hit in 3 of the last 5 for the home team, suggesting pace plays a role.
-- **Motivation factor**: Check playoff standings — teams fighting for seeding tend to play with more intensity in Q4.
-
-**Verdict**: Historical trends favor the underdog here, but trends are just one piece of the puzzle. Combine this with your own research and never bet more than you can afford to lose.`,
-  ];
-
-  return responses[seed];
-}
-
-function hashCode(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
+function readTextContent(content: OpenRouterContent | undefined): string {
+  if (typeof content === "string") {
+    return content.trim();
   }
-  return hash;
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => (part.type === "text" || !part.type ? part.text || "" : ""))
+      .join("")
+      .trim();
+  }
+
+  return "";
+}
+
+async function callOpenRouter(messages: ModelMessage[], options?: { maxTokens?: number; temperature?: number }): Promise<string> {
+  const config = getOpenRouterConfig();
+
+  const response = await fetch(`${config.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": config.siteUrl,
+      "X-Title": config.siteName,
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages,
+      max_tokens: options?.maxTokens ?? 500,
+      temperature: options?.temperature ?? 0.4,
+    }),
+    cache: "no-store",
+  });
+
+  const payload = await response.json().catch(() => null) as OpenRouterResponse & { error?: { message?: string } } | null;
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || `OpenRouter request failed with ${response.status}`);
+  }
+
+  const text = readTextContent(payload?.choices?.[0]?.message?.content);
+  if (!text) {
+    throw new Error("OpenRouter returned an empty response");
+  }
+
+  return text;
+}
+
+function extractJsonObject(source: string): Record<string, unknown> | null {
+  const fencedMatch = source.match(/```json\s*([\s\S]+?)\s*```/i);
+  const candidate = fencedMatch?.[1] || source;
+
+  try {
+    return JSON.parse(candidate) as Record<string, unknown>;
+  } catch {
+    const objectMatch = candidate.match(/\{[\s\S]+\}/);
+    if (!objectMatch) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(objectMatch[0]) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function buildHeuristicMatchResponse(input: MatchResponseInput): string {
+  const favoriteIsHome = Math.abs(input.game.homeMoneyline) >= Math.abs(input.game.awayMoneyline);
+  const favoriteTeam = favoriteIsHome ? input.game.homeTeam : input.game.awayTeam;
+  const favoriteRecord = favoriteIsHome ? input.game.homeRecord : input.game.awayRecord;
+  const favoriteLeader = favoriteIsHome ? input.game.homeLeader : input.game.awayLeader;
+  const underdogTeam = favoriteIsHome ? input.game.awayTeam : input.game.homeTeam;
+  const accessContext = input.unlockedPrediction
+    ? "The user already has paid access, so give a direct matchup answer."
+    : "Keep the answer grounded and standalone to this matchup.";
+
+  return [
+    "## Read",
+    "",
+    `- ${favoriteTeam} is still carrying the stronger market respect on the moneyline while sitting at **${favoriteRecord}**.`,
+    `- The primary usage marker on that side is **${favoriteLeader}**, which matters if the game stays half-court late.`,
+    `- ${underdogTeam} still has a path if pace or variance flips the script, so this is not a blind chase spot.`,
+    "",
+    "## Signal",
+    "",
+    `${accessContext} Based on the current board, the cleaner side is **${favoriteTeam} moneyline**, but only at standard stake sizing.`,
+    "",
+    "## Risk",
+    "",
+    `- Spread and total context: ${input.game.spread}, total ${input.game.total}.`,
+    "- Re-check injuries and late line movement before acting, especially if the number starts running away from the open.",
+  ].join("\n");
+}
+
+export async function generateMatchResponse(input: MatchResponseInput): Promise<string> {
+  const systemMessage = [
+    input.systemPrompt.trim(),
+    "",
+    "You are answering inside LOCKIN, a paid NBA matchup analysis product.",
+    `You must discuss only this game: ${input.game.awayDisplayName} at ${input.game.homeDisplayName}.`,
+    "Use only the provided matchup context and market data.",
+    "Do not promise outcomes. Do not invent injuries, trends or odds.",
+    "Do not mention or compare any other matchup on the slate.",
+    "Respond in tight markdown with the sections `## Read`, `## Signal`, and `## Risk`.",
+    "Keep the answer under 220 words and make the final signal actionable but cautious.",
+  ].join("\n");
+
+  const userMessage = [
+    `User question: ${input.question}`,
+    "",
+    "Matchup context:",
+    buildGameContext(input.game),
+    "",
+    `Paid daily card active: ${input.unlockedPrediction ? "yes" : "no"}`,
+    "Important: answer only from the matchup context above.",
+  ].join("\n");
+
+  try {
+    return await callOpenRouter(
+      [
+        { role: "system", content: systemMessage },
+        { role: "user", content: userMessage },
+      ],
+      { maxTokens: 420, temperature: 0.35 },
+    );
+  } catch {
+    return buildHeuristicMatchResponse(input);
+  }
+}
+
+export async function generateDailyPrediction(input: DailyPredictionInput): Promise<{
+  teaserText: string;
+  markdownContent: string;
+  isNoEdgeDay: boolean;
+}> {
+  if (input.games.length === 0) {
+    return buildHeuristicDailyPrediction(input.games);
+  }
+
+  const systemMessage = [
+    input.systemPrompt.trim(),
+    "",
+    "You are creating LOCKIN's daily NBA moneyline feature card.",
+    "Use only the supplied slate context.",
+    "Pick one best moneyline lane or declare a no-edge day if the board is weak.",
+    "Return valid JSON only with this shape:",
+    '{"teaserText":"two short lines separated by a newline","markdownContent":"markdown string","isNoEdgeDay":false}',
+    "The markdown must contain a heading, 2-4 bullets, and a short risk section.",
+    "Do not wrap the JSON in prose.",
+  ].join("\n");
+
+  const userMessage = [
+    "Today's NBA slate:",
+    buildDailySlateContext(input.games),
+  ].join("\n\n");
+
+  try {
+    const raw = await callOpenRouter(
+      [
+        { role: "system", content: systemMessage },
+        { role: "user", content: userMessage },
+      ],
+      { maxTokens: 700, temperature: 0.45 },
+    );
+
+    const parsed = extractJsonObject(raw);
+    const teaserText = typeof parsed?.teaserText === "string" ? parsed.teaserText.trim() : "";
+    const markdownContent = typeof parsed?.markdownContent === "string" ? parsed.markdownContent.trim() : "";
+    const isNoEdgeDay = typeof parsed?.isNoEdgeDay === "boolean" ? parsed.isNoEdgeDay : false;
+
+    if (teaserText && markdownContent) {
+      return { teaserText, markdownContent, isNoEdgeDay };
+    }
+  } catch {
+    // fall through to deterministic daily summary
+  }
+
+  return buildHeuristicDailyPrediction(input.games);
 }

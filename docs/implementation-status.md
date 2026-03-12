@@ -10,10 +10,10 @@ Bu dosya, PRD V1.2 için yapılan son ilerlemeyi ve bir sonraki adımları sakla
 ## Nereye Kaldık
 
 - Ana kullanıcı akışı SPA olarak çalışır durumda:
-  - Blurlu günlük tahmin kartı (dummy metin + anti-hack kuralı)
+  - Blurlu günlük tahmin kartı (canlı slate bağlamından üretilen teaser + anti-hack kuralı)
   - Günlük paywall `$5` açma
   - No Edge Day’de `$5` kapısının kapanıp `$2` LLM CTA’sına geçmesi
-  - Maç listesi: sadece **Away @ Home** + **Moneyline (American Odds)**
+  - Maç listesi: canlı ESPN scoreboard + **Moneyline (American Odds)**
   - LLM sohbeti: `$2` açma, 3 soru limiti, `+3` genişleme
   - Restore akışı: `magic link` + `localStorage` token ile kurtarma
   - Insight Card üretimi (`html2canvas` ile PNG)
@@ -59,8 +59,9 @@ Bu dosya, PRD V1.2 için yapılan son ilerlemeyi ve bir sonraki adımları sakla
 ## Kısa Önemli Notlar (Henüz Tam Olmayanlar)
 
 - Stripe Checkout gerçek canlı entegrasyon henüz mock akışında.
-- OpenRouter Gemini 3 Flash canlı çağrı henüz uygulanmadı; şimdilik fallback/mock cevap mantığı var.
-- Kalıcı veri katmanı (Supabase/Postgres) yerine in-memory store kullanılıyor.
+- OpenRouter `google/gemini-3.1-flash-lite-preview` canlı çağrısı aktif; hata durumunda deterministik fallback cevabı var.
+- Kalıcı veri katmanı Supabase Postgres üzerinden çalışıyor; schema ilk server erişiminde otomatik bootstrap ediliyor.
+- Korumalı live-sync endpoint ve scheduler örneği eklendi; auto prediction yenilemesi admin override’larını ezmiyor.
 
 ## Son Doğrulamalar
 
@@ -69,6 +70,7 @@ Bu dosya, PRD V1.2 için yapılan son ilerlemeyi ve bir sonraki adımları sakla
 
 ## Sonraki Adım
 
-1. Stripe checkout + webhook’u gerçek ortamda bağlamak (checkout session doğrulama + signature kontrolü)
-2. LLM servisini OpenRouter Gemini 3 Flash’e geçirmek (streaming + token limiti)
-3. Store’u DB’ye taşımak (Supabase) ve cron/jobs ile oyun verisi çekimi eklemek
+1. Stripe checkout + webhook katmanını gerçek sağlayıcı doğrulamasıyla sertleştirmek
+2. Supabase SQL migration dosyalarını repo içine almak
+3. Günlük edge üretimini oyun değişimlerini hashleyerek daha deterministik invalidate etmek
+4. Admin ve ödeme kayıtları için audit/log görünürlüğünü artırmak

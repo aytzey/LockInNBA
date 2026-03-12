@@ -9,6 +9,16 @@ export function getEstDateKey(date = new Date()): string {
   }).format(date);
 }
 
+export function shiftEstDateKey(dateKey: string, days: number): string {
+  const base = new Date(`${dateKey}T12:00:00Z`);
+  if (Number.isNaN(base.getTime())) {
+    return dateKey;
+  }
+
+  base.setUTCDate(base.getUTCDate() + days);
+  return getEstDateKey(base);
+}
+
 export function formatEstDateTime(dateTime: string): string {
   const date = new Date(dateTime);
   if (Number.isNaN(date.getTime())) {
@@ -27,7 +37,7 @@ export function formatEstDateTime(dateTime: string): string {
 }
 
 export function formatEstDate(date: string): string {
-  const dateObj = new Date(date);
+  const dateObj = new Date(`${date}T12:00:00Z`);
   if (Number.isNaN(dateObj.getTime())) {
     return "";
   }

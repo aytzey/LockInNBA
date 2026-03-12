@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildModelPrompt, mockAiResponse } from "@/lib/llm";
+import { generateMatchResponse } from "@/lib/llm";
 import {
   addChatMessage,
   getChatMessages,
@@ -7,8 +7,9 @@ import {
   hasChatCapacity,
   touchSession,
   getGames,
-  getTodayPrediction,
+  getActiveSystemPrompt,
 } from "@/lib/store";
+import { getOrCreateTodayPrediction, syncTodayGames } from "@/lib/daily-edge";
 import { getEstDateKey } from "@/lib/time";
 import { parseBearerToken, verifyAccessToken } from "@/lib/token";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "message is required" }, { status: 400 });
   }
 
-  const session = getChatSession(sessionId);
+  const session = await getChatSession(sessionId);
   if (!session) {
     return NextResponse.json({ message: "Session not found" }, { status: 404 });
   }
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!hasChatCapacity(sessionId)) {
+  if (!(await hasChatCapacity(sessionId))) {
     return NextResponse.json(
       {
         message: "Question limit reached",
@@ -63,44 +64,37 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const game = getGames(getEstDateKey()).find((item) => item.id === session.gameId);
-  const prediction = getTodayPrediction(getEstDateKey());
-  const context = buildModelPrompt({
-    question,
-    game: game || {
-      id: session.gameId,
-      date: getEstDateKey(),
-      awayTeam: "",
-      homeTeam: "",
-      gameTimeEST: new Date().toISOString(),
-      status: "upcoming",
-      awayScore: null,
-      homeScore: null,
-      awayMoneyline: 0,
-      homeMoneyline: 0,
-      oddsSource: "DraftKings",
-      apiGameId: "",
-    },
-    odds: `${game?.awayMoneyline ?? 0} / ${game?.homeMoneyline ?? 0}`,
-    predictionText: prediction.markdownContent,
-    unlockedPrediction: Boolean(session.isPaid),
-  });
+  const dateKey = getEstDateKey();
+  const liveGames = await syncTodayGames(dateKey);
+  const storedGames = await getGames(dateKey);
+  const game = liveGames.find((item) => item.id === session.gameId) || storedGames.find((item) => item.id === session.gameId);
+  if (!game) {
+    return NextResponse.json({ message: "Game context could not be loaded" }, { status: 404 });
+  }
 
-  addChatMessage(sessionId, "user", question);
+  const prediction = await getOrCreateTodayPrediction(dateKey);
+
+  await addChatMessage(sessionId, "user", question);
   session.questionsUsed += 1;
-  touchSession(sessionId, {
+  await touchSession(sessionId, {
     questionsUsed: session.questionsUsed,
     isPaid: session.isPaid,
     email: claimedEmail || session.email,
   });
 
-  const answer = mockAiResponse(context);
-  const assistantMessage = addChatMessage(sessionId, "assistant", answer);
+  const answer = await generateMatchResponse({
+    question,
+    game,
+    predictionText: prediction.markdownContent,
+    unlockedPrediction: Boolean(session.isPaid),
+    systemPrompt: (await getActiveSystemPrompt()).content,
+  });
+  const assistantMessage = await addChatMessage(sessionId, "assistant", answer);
 
   return NextResponse.json({
     assistantMessage,
-    messages: getChatMessages(sessionId),
+    messages: await getChatMessages(sessionId),
     questionsRemaining: Math.max(0, session.questionLimit - session.questionsUsed),
-    isLocked: !hasChatCapacity(sessionId),
+    isLocked: !(await hasChatCapacity(sessionId)),
   });
 }

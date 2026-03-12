@@ -21,8 +21,8 @@ interface TonightsEdgeProps {
 
 function splitTeaser(text: string): { headline: string; body: string } {
   const lines = text.split("\n").filter((line) => line.trim().length > 0);
-  const headline = lines.slice(0, 2).join(" ") || "Tonight's top edge is being evaluated...";
-  const body = lines.slice(2).join("\n") || "Full analysis ready after model processes today's matchup data.";
+  const headline = lines.slice(0, 2).join(" ") || "The board is filtering toward a single moneyline angle.";
+  const body = lines.slice(2).join("\n") || "The complete write-up stays behind the daily unlock once the card is ready.";
   return { headline, body };
 }
 
@@ -64,26 +64,45 @@ export default function TonightsEdge({
   }
 
   return (
-    <section className="rotating-border lockin-card fade-in relative overflow-hidden rounded-2xl p-5 md:p-6">
-      {/* Background glows */}
-      <div className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-[#00c853]/[0.04] blur-[60px]" />
-      <div className="pointer-events-none absolute -left-16 bottom-0 h-32 w-32 rounded-full bg-[#00ff87]/[0.03] blur-[50px]" />
+    <section className="hero-card fade-in relative overflow-hidden rounded-[2rem] p-5 md:p-7">
+      <div className="hero-card__mesh" />
 
       <div className="relative">
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h1 className="heading text-2xl font-bold text-white md:text-3xl">Tonight&apos;s Edge</h1>
-            <p className="mt-0.5 text-xs text-[#8b92a5]">AI-filtered moneyline analysis</p>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-xl">
+            <p className="section-kicker">Daily edge</p>
+            <h1 className="heading mt-3 text-[2.35rem] leading-none text-white md:text-[3.2rem]">LOCKIN filters the board before you pay.</h1>
+            <p className="mt-3 text-sm leading-6 text-[var(--muted)] md:text-[0.98rem]">
+              One premium moneyline read, generated from the live NBA slate and gated only when the board actually earns it.
+            </p>
           </div>
-          <span className="mono rounded-full border border-[#ffd700]/25 bg-[#ffd700]/[0.06] px-3 py-1 text-[11px] font-medium text-[#ffd700]">
-            {prediction ? formatEstDate(prediction.date) : "LIVE"}
-          </span>
+          <div className="space-y-2">
+            <span className="date-pill">
+              {prediction ? formatEstDate(prediction.date) : "Tonight"}
+            </span>
+            <div className="hero-price-pill">$5 daily unlock</div>
+          </div>
+        </div>
+
+        <div className="mb-5 grid gap-2 sm:grid-cols-3">
+          <div className="hero-stat">
+            <span className="hero-stat__label">Scope</span>
+            <span className="hero-stat__value">Moneyline only</span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat__label">Format</span>
+            <span className="hero-stat__value">Markdown card</span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat__label">After unlock</span>
+            <span className="hero-stat__value">Shareable insight</span>
+          </div>
         </div>
 
         {isLoading ? (
           <div className="space-y-3">
             <div className="skeleton-shimmer h-5 w-3/4 rounded" />
-            <div className="rounded-lg border border-white/[0.04] bg-black/10 p-4">
+            <div className="rounded-[1.5rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] p-5">
               <div className="space-y-2.5">
                 <div className="skeleton-shimmer h-4 w-full rounded" />
                 <div className="skeleton-shimmer h-4 w-5/6 rounded" />
@@ -93,43 +112,46 @@ export default function TonightsEdge({
             <div className="skeleton-shimmer h-12 w-full rounded-xl" />
           </div>
         ) : noEdge ? (
-          <div className="rounded-xl border border-[#ff6b35]/30 bg-gradient-to-br from-[#ff6b35]/[0.06] to-transparent p-5">
+          <div className="rounded-[1.6rem] border border-[color:var(--amber-line)] bg-[color:var(--amber-soft)] p-5 md:p-6">
             <div className="mb-3 flex items-center gap-2">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#ff6b35]" />
-              <p className="heading text-lg font-bold text-[#ff6b35]">
-                NO EDGE DETECTED TODAY
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-[color:var(--amber)]" />
+              <p className="heading text-lg font-bold text-[color:var(--amber)]">
+                No clean edge on the daily card
               </p>
             </div>
-            <p className="mb-5 leading-relaxed text-[#f5f5f3]/80">
-              Our engine found no mathematical edge against Vegas tonight. We are not touts and
-              won&apos;t force a daily lock for $5.
-              Protect your bankroll — if you&apos;re still looking for action, open a matchup below and
-              discuss it with AI for $2.
+            <p className="mb-5 max-w-2xl leading-relaxed text-[color:var(--text-soft)]">
+              LOCKIN is skipping the premium daily pick because the board does not show a clean enough mathematical lane. If you still want action, open a matchup below and work through it inside the paid game chat.
             </p>
             <button
               type="button"
               onClick={onScrollToGames}
-              className="btn-glow rounded-xl bg-gradient-to-r from-[#00c853] to-[#00b848] px-5 py-2.5 font-semibold text-black transition hover:from-[#00ff87] hover:to-[#00c853]"
+              className="primary-button"
             >
-              Open matchups and build your edge
+              Open the matchup board
             </button>
           </div>
         ) : (
           <>
-            <p className="neon-green mb-3 text-lg font-medium text-[#00ff87]">{preview.headline}</p>
-            <div className="mb-5 rounded-xl border border-white/[0.06] bg-black/20 p-4">
-              <div className="blurred text-[#8b92a5]">
-                {preview.body.split("\n").map((line, i) => (
-                  <p className="leading-relaxed" key={i}>
-                    {line}
-                  </p>
-                ))}
+            <div className="teaser-frame">
+              <div className="teaser-frame__header">
+                <span className="section-kicker section-kicker--muted">Preview</span>
+                <span className="teaser-lock">Locked until purchase</span>
               </div>
-              <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-[#8b92a5]">
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                Content locked — unlock to reveal full analysis
+              <p className="heading mt-3 text-[1.55rem] leading-tight text-[color:var(--accent-strong)] md:text-[1.9rem]">{preview.headline}</p>
+              <div className="mt-4 rounded-[1.35rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] p-4">
+                <div className="blurred space-y-2 text-[color:var(--muted)]">
+                  {preview.body.split("\n").map((line, i) => (
+                    <p className="leading-relaxed" key={i}>
+                      {line}
+                    </p>
+                  ))}
+                </div>
+                <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-[var(--muted)]">
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  Full report unlocks as markdown plus an exportable share card.
+                </div>
               </div>
             </div>
 
@@ -140,23 +162,27 @@ export default function TonightsEdge({
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="space-y-3"
+                  className="mt-5 space-y-3"
                 >
-                  <input
-                    value={dailyEmail}
-                    onChange={(e) => setDailyEmail(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleCheckout()}
-                    className="input-field w-full"
-                    placeholder="you@email.com"
-                    type="email"
-                  />
+                  <div className="space-y-2">
+                    <label className="input-label" htmlFor="daily-email">Email for access delivery</label>
+                    <input
+                      id="daily-email"
+                      value={dailyEmail}
+                      onChange={(e) => setDailyEmail(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleCheckout()}
+                      className="input-field w-full"
+                      type="email"
+                      autoComplete="email"
+                    />
+                  </div>
                   <motion.button
                     type="button"
                     onClick={handleCheckout}
                     disabled={unlocking}
                     whileHover={{ scale: 1.01 }}
                     whileTap={{ scale: 0.98 }}
-                    className="btn-glow btn-shine w-full rounded-xl bg-gradient-to-r from-[#00c853] to-[#00b848] px-4 py-3.5 text-lg font-bold text-[#0a0e1a] transition hover:from-[#00ff87] hover:to-[#00c853] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="primary-button w-full justify-center text-lg"
                   >
                     {unlocking ? (
                       <span className="flex items-center justify-center gap-2">
@@ -165,14 +191,14 @@ export default function TonightsEdge({
                           animate={{ rotate: 360 }}
                           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                         />
-                        Processing...
+                        Processing secure unlock
                       </span>
                     ) : (
-                      "Unlock Today's Edge — $5"
+                      "Unlock today's edge"
                     )}
                   </motion.button>
-                  <p className="text-center text-[11px] text-[#8b92a5]">
-                    One-time daily access &middot; Full markdown analysis &middot; Shareable insight card
+                  <p className="text-center text-[11px] text-[var(--muted)]">
+                    One payment. Full daily markdown. Share card export included.
                   </p>
                 </motion.div>
               ) : (
@@ -181,11 +207,11 @@ export default function TonightsEdge({
                   initial={{ opacity: 0, y: 20, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                  className="rounded-xl border border-[#00c853]/20 bg-gradient-to-br from-[#00c853]/[0.04] to-transparent p-5"
+                  className="rounded-[1.6rem] border border-[color:var(--accent-line)] bg-[color:var(--accent-soft)] p-5"
                 >
                   <div className="mb-4 flex items-center gap-2">
                     <span className="glow-dot" />
-                    <span className="heading text-sm font-semibold text-[#00ff87]">Daily edge unlocked</span>
+                    <span className="heading text-sm font-semibold text-[color:var(--accent-strong)]">Daily edge unlocked</span>
                   </div>
                   <MarkdownContent content={dailyMarkdown} />
                   <div className="mt-5 flex gap-2">
@@ -195,19 +221,19 @@ export default function TonightsEdge({
                       disabled={isShareBusy}
                       whileHover={{ scale: 1.03 }}
                       whileTap={{ scale: 0.97 }}
-                      className="btn-wave flex items-center gap-1.5 rounded-lg border border-[#00c853]/30 px-4 py-2 text-sm text-[#00ff87] transition hover:bg-[#00c853]/10"
+                      className="secondary-button"
                     >
                       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                       </svg>
-                      {isShareBusy ? "Generating..." : "Share your edge"}
+                      {isShareBusy ? "Generating card" : "Export share card"}
                     </motion.button>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
             {error && (
-              <p className="mt-3 rounded-lg border border-[#ff3b3b]/20 bg-[#ff3b3b]/[0.06] px-4 py-2 text-sm text-[#ff3b3b]">{error}</p>
+              <p className="mt-3 rounded-[1rem] border border-[color:var(--signal-red-line)] bg-[color:var(--signal-red-soft)] px-4 py-2 text-sm text-[var(--signal-red)]">{error}</p>
             )}
           </>
         )}

@@ -5,12 +5,12 @@ import { getEstDateKey } from "@/lib/time";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const result = consumeMagicLink(token);
+  const result = await consumeMagicLink(token);
   if (!result) {
     return NextResponse.json({ message: "Invalid or expired link" }, { status: 410 });
   }
 
-  if (!validateDailyToken(result.email)) {
+  if (!(await validateDailyToken(result.email))) {
     return NextResponse.json({ message: "No active purchase for this email" }, { status: 404 });
   }
 

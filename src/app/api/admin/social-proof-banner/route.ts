@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
-  const banner = getSocialProofBanner();
+  const banner = await getSocialProofBanner();
   return NextResponse.json({ banner: banner?.text || "" });
 }
 
@@ -22,7 +22,6 @@ export async function PUT(request: NextRequest) {
 
   const body = await request.json().catch(() => null);
   const text = (body?.text || "").toString();
-  const banner = setSocialProofBanner(text);
+  const banner = await setSocialProofBanner(text);
   return NextResponse.json({ banner });
 }
-

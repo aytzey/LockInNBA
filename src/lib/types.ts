@@ -6,6 +6,7 @@ export interface DailyPrediction {
   markdownContent: string;
   teaserText: string;
   isNoEdgeDay: boolean;
+  source: "auto" | "admin";
   createdAt: string;
   updatedAt: string;
 }
@@ -29,14 +30,28 @@ export interface Game {
   id: string;
   date: string;
   awayTeam: string;
+  awayDisplayName: string;
+  awayRecord: string;
+  awayLeader: string;
+  awayLogo: string;
   homeTeam: string;
+  homeDisplayName: string;
+  homeRecord: string;
+  homeLeader: string;
+  homeLogo: string;
   gameTimeEST: string;
   status: MoneylineStatus;
+  statusDetail: string;
   awayScore: number | null;
   homeScore: number | null;
   awayMoneyline: number;
   homeMoneyline: number;
   oddsSource: "DraftKings" | "FanDuel" | "BetMGM";
+  spread: string;
+  total: string;
+  broadcast: string;
+  venue: string;
+  gameUrl: string;
   apiGameId: string;
 }
 
@@ -99,4 +114,3 @@ export interface AccessTokenPayload {
   exp: number;
   iat: number;
 }
-

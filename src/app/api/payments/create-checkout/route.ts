@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createCheckoutSession, getTodayPrediction } from "@/lib/store";
+import { getOrCreateTodayPrediction } from "@/lib/daily-edge";
+import { createCheckoutSession } from "@/lib/store";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
@@ -33,11 +34,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Missing gameId" }, { status: 400 });
   }
 
-  if (type === "daily_pick" && getTodayPrediction().isNoEdgeDay) {
+  if (type === "daily_pick" && (await getOrCreateTodayPrediction()).isNoEdgeDay) {
     return NextResponse.json({ message: "No edge day" }, { status: 403 });
   }
 
-  const result = createCheckoutSession({
+  const result = await createCheckoutSession({
     email,
     type,
     gameId,
@@ -51,4 +52,3 @@ export async function POST(request: NextRequest) {
     checkoutUrl: `/api/payments/mock-complete?sessionId=${result.id}`,
   });
 }
-

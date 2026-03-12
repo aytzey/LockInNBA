@@ -15,8 +15,8 @@ import { DAILY_TOKEN_KEY } from "@/components/utils";
 
 function splitTeaser(text: string): { headline: string; body: string } {
   const lines = text.split("\n").filter((line) => line.trim().length > 0);
-  const headline = lines.slice(0, 2).join(" ") || "Tonight's top edge is being evaluated...";
-  const body = lines.slice(2).join("\n") || "Full analysis loading...";
+  const headline = lines.slice(0, 2).join(" ") || "Today's board is being filtered for the cleanest moneyline lane.";
+  const body = lines.slice(2).join("\n") || "The full report stays locked until daily access is opened.";
   return { headline, body };
 }
 
@@ -59,6 +59,7 @@ export default function HomePage() {
   const [todayPrediction, setTodayPrediction] = useState<TodayPrediction | null>(null);
   const [socialProof, setSocialProof] = useState("");
   const [games, setGames] = useState<Game[]>([]);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState("");
 
   const [dailyMarkdown, setDailyMarkdown] = useState("");
   const [dailyUnlocked, setDailyUnlocked] = useState(false);
@@ -108,6 +109,7 @@ export default function HomePage() {
         if (pBody) setTodayPrediction(pBody);
         if (gBody?.games) setGames(gBody.games);
         setSocialProof(bBody?.text || "");
+        setLastUpdatedAt(new Date().toISOString());
 
         const savedToken = window.localStorage.getItem(DAILY_TOKEN_KEY);
         if (savedToken) {
@@ -124,6 +126,7 @@ export default function HomePage() {
   function handleOpenChat(game: Game) {
     setSelectedGame(game);
     setShareMode("chat");
+    setChatMessages([]);
   }
 
   function handleCloseChat() {
@@ -153,6 +156,16 @@ export default function HomePage() {
   const liveGames = games.filter((g) => g.status === "live");
   const upcomingGames = games.filter((g) => g.status === "upcoming");
   const finalGames = games.filter((g) => g.status === "final");
+  const spotlightGames = [...liveGames, ...upcomingGames, ...finalGames].slice(0, 3);
+
+  const lastUpdatedLabel = lastUpdatedAt
+    ? new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(lastUpdatedAt))
+    : "";
 
   function renderGameSection(sectionGames: Game[], startIndex: number) {
     return sectionGames.map((game, i) => (
@@ -196,7 +209,7 @@ export default function HomePage() {
           )}
         </AnimatePresence>
 
-        <motion.div variants={itemVariants}>
+        <motion.section className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]" variants={itemVariants}>
           <TonightsEdge
             prediction={todayPrediction}
             isLoading={isLoading}
@@ -210,13 +223,96 @@ export default function HomePage() {
             }}
             isShareBusy={isShareBusy}
           />
-        </motion.div>
+
+          <aside className="slate-panel relative overflow-hidden rounded-[1.75rem] p-5 md:p-6">
+            <div className="slate-panel__glow" />
+            <div className="relative space-y-5">
+              <div>
+                <p className="section-kicker">Slate pulse</p>
+                <h2 className="heading mt-2 text-[1.6rem] leading-none text-white">Tonight&apos;s board, read fast</h2>
+                <p className="mt-2 max-w-sm text-sm text-[var(--muted)]">
+                  Real-time NBA games, moneylines and broadcast context pulled into the board before the chat opens.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="slate-stat">
+                  <span className="slate-stat__value">{liveGames.length}</span>
+                  <span className="slate-stat__label">Live</span>
+                </div>
+                <div className="slate-stat">
+                  <span className="slate-stat__value">{upcomingGames.length}</span>
+                  <span className="slate-stat__label">Upcoming</span>
+                </div>
+                <div className="slate-stat">
+                  <span className="slate-stat__value">{finalGames.length}</span>
+                  <span className="slate-stat__label">Final</span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {spotlightGames.length > 0 ? spotlightGames.map((game) => (
+                  <button
+                    key={game.id}
+                    type="button"
+                    onClick={() => handleOpenChat(game)}
+                    className="slate-spotlight group w-full text-left"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="heading text-base text-white">{game.awayTeam} @ {game.homeTeam}</p>
+                        <p className="mt-1 text-xs text-[var(--muted)]">{game.statusDetail}</p>
+                      </div>
+                      <span className={`slate-status-pill ${game.status === "live" ? "slate-status-pill--live" : ""}`}>
+                        {game.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--muted)]">
+                      <span className="chip">{game.awayTeam} {game.awayMoneyline > 0 ? `+${game.awayMoneyline}` : game.awayMoneyline || "OFF"}</span>
+                      <span className="chip">{game.homeTeam} {game.homeMoneyline > 0 ? `+${game.homeMoneyline}` : game.homeMoneyline || "OFF"}</span>
+                      <span className="chip">{game.spread}</span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-xs text-[var(--muted)]">
+                      <span>{game.broadcast}</span>
+                      <span>{game.venue}</span>
+                    </div>
+                  </button>
+                )) : (
+                  <div className="rounded-[1.35rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] p-4 text-sm text-[var(--muted)]">
+                    Today&apos;s NBA board is currently empty. The next slate will appear here as soon as ESPN posts it.
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between border-t border-[color:var(--line)] pt-4 text-xs text-[var(--muted)]">
+                <span>Verified from live scoreboard and market feed.</span>
+                <span>{lastUpdatedLabel ? `Updated ${lastUpdatedLabel} ET` : "Waiting for sync"}</span>
+              </div>
+            </div>
+          </aside>
+        </motion.section>
 
         <motion.section ref={gameSectionRef} className="space-y-4" variants={itemVariants}>
           <div>
-            <h2 className="heading text-xl text-white">Tonight&apos;s Matchups</h2>
-            <p className="mt-1 text-xs text-[#8b92a5]">
-              Moneyline only &middot; American odds &middot; Click any game for AI analysis
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="heading text-[1.8rem] text-white">Tonight&apos;s Matchups</h2>
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  Moneyline board only. Open any matchup for a paid AI read built from the live slate context.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => gameSectionRef.current?.scrollIntoView({ behavior: "smooth" })}
+                className="ghost-button"
+              >
+                Scan the board
+              </button>
+            </div>
+            <p className="mt-3 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.2em] text-[var(--muted)]">
+              <span className="chip">American odds</span>
+              <span className="chip">Live scoreboard</span>
+              <span className="chip">Ask the model per matchup</span>
             </p>
           </div>
 
@@ -227,25 +323,25 @@ export default function HomePage() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.4 }}
-              className="overflow-hidden rounded-xl border border-[#2a3852]/40 bg-gradient-to-b from-[#111829] to-[#0d1422] p-10 text-center"
+              className="overflow-hidden rounded-[1.75rem] border border-[color:var(--line)] bg-[color:var(--panel)] p-10 text-center shadow-[var(--shadow-soft)]"
             >
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#ff6b35]/10 ring-1 ring-[#ff6b35]/20">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[color:var(--amber-soft)] ring-1 ring-[color:var(--amber-line)]">
                 <svg className="h-8 w-8 text-[#ff6b35]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
               <p className="heading text-base font-semibold text-white">No games scheduled for today</p>
-              <p className="mt-2 text-sm text-[#8b92a5]">Check back tomorrow for the next slate of NBA action.</p>
+              <p className="mt-2 text-sm text-[var(--muted)]">The next NBA slate will appear here automatically once it is posted.</p>
             </motion.div>
           ) : (
             <div className="space-y-4">
               {liveGames.length > 0 && (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs text-[#ff3b3b]">
+                  <div className="flex items-center gap-2 text-xs text-[var(--signal-red)]">
                     <span className="live-dot" />
                     <span className="font-medium uppercase tracking-wider">Live Now</span>
                   </div>
-                  <div className="space-y-3">
+                  <div className="grid gap-3 xl:grid-cols-2">
                     {renderGameSection(liveGames, 0)}
                   </div>
                 </div>
@@ -253,10 +349,8 @@ export default function HomePage() {
 
               {upcomingGames.length > 0 && (
                 <div className="space-y-2">
-                  {liveGames.length > 0 && (
-                    <div className="text-xs font-medium uppercase tracking-wider text-[#8b92a5]">Upcoming</div>
-                  )}
-                  <div className="space-y-3">
+                  <div className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">Upcoming</div>
+                  <div className="grid gap-3 xl:grid-cols-2">
                     {renderGameSection(upcomingGames, liveGames.length)}
                   </div>
                 </div>
@@ -264,8 +358,8 @@ export default function HomePage() {
 
               {finalGames.length > 0 && (
                 <div className="space-y-2">
-                  <div className="text-xs font-medium uppercase tracking-wider text-[#8b92a5]">Final</div>
-                  <div className="space-y-3">
+                  <div className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">Final</div>
+                  <div className="grid gap-3 xl:grid-cols-2">
                     {renderGameSection(finalGames, liveGames.length + upcomingGames.length)}
                   </div>
                 </div>
@@ -285,6 +379,7 @@ export default function HomePage() {
               onClose={handleCloseChat}
               onShareRequest={() => handleShare()}
               isShareBusy={isShareBusy}
+              onMessagesChange={setChatMessages}
             />
           )}
         </AnimatePresence>

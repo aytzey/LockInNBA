@@ -34,22 +34,22 @@ function renderMarkdown(source: string): string {
 
     if (trimmed.startsWith("# ")) {
       if (inList) { output.push("</ul>"); inList = false; }
-      output.push(`<h1 class="text-xl font-bold text-[#00ff87] mt-4 mb-2 heading">${escapeHtml(trimmed.slice(2))}</h1>`);
+      output.push(`<h1 class="text-xl font-bold text-[color:var(--accent-strong)] mt-4 mb-2 heading">${escapeHtml(trimmed.slice(2))}</h1>`);
     } else if (trimmed.startsWith("## ")) {
       if (inList) { output.push("</ul>"); inList = false; }
-      output.push(`<h2 class="text-lg font-semibold text-[#00ff87] mt-3 mb-1 heading">${escapeHtml(trimmed.slice(3))}</h2>`);
+      output.push(`<h2 class="text-lg font-semibold text-[color:var(--accent-strong)] mt-3 mb-1 heading">${escapeHtml(trimmed.slice(3))}</h2>`);
     } else if (trimmed.startsWith("### ")) {
       if (inList) { output.push("</ul>"); inList = false; }
-      output.push(`<h3 class="text-base font-semibold text-[#ffd700] mt-2 mb-1 heading">${escapeHtml(trimmed.slice(4))}</h3>`);
+      output.push(`<h3 class="text-base font-semibold text-[color:var(--amber)] mt-2 mb-1 heading">${escapeHtml(trimmed.slice(4))}</h3>`);
     } else if (trimmed.startsWith("- ")) {
       if (!inList) { output.push('<ul class="list-none space-y-1 my-2">'); inList = true; }
-      output.push(`<li class="flex gap-2 text-[#f5f5f3]"><span class="text-[#00c853] mt-0.5">▸</span><span>${formatInline(trimmed.slice(2))}</span></li>`);
+      output.push(`<li class="flex gap-2 text-[color:var(--text-soft)]"><span class="text-[color:var(--accent-strong)] mt-0.5">▸</span><span>${formatInline(trimmed.slice(2))}</span></li>`);
     } else if (trimmed === "") {
       if (inList) { output.push("</ul>"); inList = false; }
       output.push("<div class='h-2'></div>");
     } else {
       if (inList) { output.push("</ul>"); inList = false; }
-      output.push(`<p class="text-[#f5f5f3] leading-relaxed">${formatInline(trimmed)}</p>`);
+      output.push(`<p class="text-[color:var(--text-soft)] leading-relaxed">${formatInline(trimmed)}</p>`);
     }
   }
 
@@ -60,7 +60,7 @@ function renderMarkdown(source: string): string {
 function formatInline(text: string): string {
   let result = escapeHtml(text);
   result = result.replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
-  result = result.replace(/\*(.+?)\*/g, '<em class="text-[#8b92a5]">$1</em>');
-  result = result.replace(/`(.+?)`/g, '<code class="bg-black/30 px-1 rounded text-[#00ff87] mono text-xs">$1</code>');
+  result = result.replace(/\*(.+?)\*/g, '<em class="text-[var(--muted)]">$1</em>');
+  result = result.replace(/`(.+?)`/g, '<code class="rounded bg-black/20 px-1 text-[color:var(--accent-strong)] mono text-xs">$1</code>');
   return result;
 }

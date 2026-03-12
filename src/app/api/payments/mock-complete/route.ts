@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Missing sessionId" }, { status: 400 });
   }
 
-  const checkout = getCheckoutSession(sessionId);
+  const checkout = await getCheckoutSession(sessionId);
   if (!checkout) {
     return NextResponse.json({ message: "Checkout session not found" }, { status: 404 });
   }
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Session already paid" }, { status: 409 });
   }
 
-  const payment = completeCheckout(sessionId, `mock_${Date.now()}`);
+  const payment = await completeCheckout(sessionId, `mock_${Date.now()}`);
   if (!payment) {
     return NextResponse.json({ message: "Payment could not be completed" }, { status: 400 });
   }

@@ -9,11 +9,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "gameId is required" }, { status: 400 });
   }
 
-  const session = createChatSession(gameId);
+  const session = await createChatSession(gameId);
   return NextResponse.json({
     session,
-    questionsRemaining: remainingQuestions(session.id),
-    messages: getChatMessages(session.id),
+    questionsRemaining: await remainingQuestions(session.id),
+    messages: await getChatMessages(session.id),
   });
 }
 

@@ -12,12 +12,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Missing sessionId" }, { status: 400 });
   }
 
-  const checkout = getCheckoutSession(sessionId);
+  const checkout = await getCheckoutSession(sessionId);
   if (!checkout) {
     return NextResponse.json({ message: "Session not found" }, { status: 404 });
   }
 
-  const payment = completeCheckout(sessionId, stripePaymentId);
+  const payment = await completeCheckout(sessionId, stripePaymentId);
   if (!payment) {
     return NextResponse.json({ message: "Checkout already completed" }, { status: 409 });
   }

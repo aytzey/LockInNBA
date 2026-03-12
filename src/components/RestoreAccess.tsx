@@ -56,19 +56,18 @@ export default function RestoreAccess({ onRestore }: RestoreAccessProps) {
   }
 
   return (
-    <footer className="mt-6 overflow-hidden rounded-xl border border-[#2a3852]/40 bg-gradient-to-b from-[#111829] to-[#0d1422]">
-      {/* Restore section */}
-      <div className="border-b border-[#2a3852]/30 px-5 py-3">
+    <footer className="mt-6 overflow-hidden rounded-[1.75rem] border border-[color:var(--line)] bg-[color:var(--panel)]">
+      <div className="border-b border-[color:var(--line)] px-5 py-4">
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className="flex w-full items-center justify-between text-sm text-[#8b92a5] transition hover:text-white"
+          className="flex w-full items-center justify-between text-sm text-[var(--muted)] transition hover:text-white"
         >
           <span className="flex items-center gap-2">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
             </svg>
-            Already paid? Restore your access
+            Already paid? Restore today&apos;s access
           </span>
           <svg className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -77,40 +76,42 @@ export default function RestoreAccess({ onRestore }: RestoreAccessProps) {
 
         {isOpen && (
           <div className="fade-in mt-3 space-y-2.5">
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleRestore()}
-              className="input-field w-full"
-              placeholder="you@email.com"
-              type="email"
-            />
+            <div className="space-y-2">
+              <label className="input-label" htmlFor="restore-email">Purchase email</label>
+              <input
+                id="restore-email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleRestore()}
+                className="input-field w-full"
+                type="email"
+                autoComplete="email"
+              />
+            </div>
             <button
               type="button"
               onClick={handleRestore}
               disabled={busy}
-              className="btn-shine rounded-lg bg-gradient-to-r from-[#ff6b35] to-[#e55a25] px-4 py-2 text-sm font-medium text-black transition hover:from-[#ff8a56] hover:to-[#ff6b35] disabled:opacity-50"
+              className="secondary-button disabled:opacity-50"
             >
               {busy ? (
                 <span className="flex items-center gap-2">
                   <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-black/30 border-t-black" />
-                  Restoring...
+                  Restoring access
                 </span>
               ) : (
                 "Restore access"
               )}
             </button>
             {message && (
-              <p className={`text-sm ${isError ? "text-[#ff3b3b]" : "text-[#00c853]"}`}>{message}</p>
+              <p className={`text-sm ${isError ? "text-[var(--signal-red)]" : "text-[color:var(--accent-strong)]"}`}>{message}</p>
             )}
           </div>
         )}
       </div>
 
-      {/* Disclaimer */}
-      <div className="px-5 py-3 text-center text-[11px] leading-relaxed text-[#8b92a5]/60">
-        For entertainment purposes only. Not financial advice. We do not accept wagers.
-        If you or someone you know has a gambling problem, call 1-800-GAMBLER.
+      <div className="px-5 py-4 text-center text-[11px] leading-relaxed text-[color:var(--muted)]/80">
+        For entertainment purposes only. LOCKIN does not accept wagers or guarantee outcomes. If you or someone you know has a gambling problem, call 1-800-GAMBLER.
       </div>
     </footer>
   );

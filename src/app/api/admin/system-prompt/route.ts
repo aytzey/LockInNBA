@@ -12,8 +12,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
   return NextResponse.json({
-    active: getActiveSystemPrompt(),
-    history: listSystemPrompts(),
+    active: await getActiveSystemPrompt(),
+    history: await listSystemPrompts(),
   });
 }
 
@@ -28,7 +28,6 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ message: "content required" }, { status: 400 });
   }
 
-  const prompt = saveSystemPrompt(content);
+  const prompt = await saveSystemPrompt(content);
   return NextResponse.json({ prompt });
 }
-

@@ -10,7 +10,7 @@ export function formatEstTime(value: string): string {
 }
 
 export function formatEstDate(value: string): string {
-  const parsed = new Date(value);
+  const parsed = new Date(`${value}T12:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return "";
   return parsed.toLocaleDateString("en-US", {
     timeZone: "America/New_York",
@@ -30,6 +30,7 @@ export function todayEstLabel(): string {
 }
 
 export function moneyline(v: number): string {
+  if (v === 0) return "OFF";
   return v > 0 ? `+${v}` : `${v}`;
 }
 

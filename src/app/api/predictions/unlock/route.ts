@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTodayPrediction, validateDailyToken } from "@/lib/store";
+import { getOrCreateTodayPrediction } from "@/lib/daily-edge";
+import { validateDailyToken } from "@/lib/store";
 import { getEstDateKey } from "@/lib/time";
 import { verifyAccessToken, parseBearerToken } from "@/lib/token";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -24,11 +25,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "Token expired for this day" }, { status: 403 });
   }
 
-  if (!validateDailyToken(token.sub)) {
+  if (!(await validateDailyToken(token.sub))) {
     return NextResponse.json({ message: "No active payment found" }, { status: 403 });
   }
 
-  const prediction = getTodayPrediction(date);
+  const prediction = await getOrCreateTodayPrediction(date);
   if (prediction.isNoEdgeDay) {
     return NextResponse.json({ message: "No edge day" }, { status: 403 });
   }

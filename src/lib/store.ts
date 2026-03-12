@@ -1,17 +1,15 @@
 import crypto from "node:crypto";
+import { query, withTransaction } from "./db";
 import {
   ChatMessage,
   ChatSession,
   DailyPrediction,
   Game,
-  MagicLinkToken,
   Payment,
   SocialProofBanner,
   SystemPrompt,
 } from "./types";
 import { getEstDateKey } from "./time";
-
-const NOW = new Date().toISOString();
 
 interface CheckoutSession {
   id: string;
@@ -24,98 +22,168 @@ interface CheckoutSession {
   createdAt: string;
 }
 
-interface AppState {
-  predictions: DailyPrediction[];
-  socialProofBanner: SocialProofBanner | null;
-  systemPrompts: SystemPrompt[];
-  games: Game[];
-  chatSessions: ChatSession[];
-  chatMessages: ChatMessage[];
-  payments: Payment[];
-  checkoutSessions: CheckoutSession[];
-  magicLinks: MagicLinkToken[];
+type RowValue = string | number | boolean | Date | null | undefined;
+
+function toIsoString(value: RowValue): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+  }
+
+  return new Date().toISOString();
 }
 
-const defaultPrompt = {
-  id: crypto.randomUUID(),
-  content:
-    "Sen LOCKIN'ın NBA analiz asistanısın. Veri odaklı ve net konuş. Sadece istatistiksel avantajları göster, kesin sonuç vaadi verme, bahis tavsiyesi olarak yorumlanmaması için dikkatli ol.",
-  version: 1,
-  isActive: true,
-  createdAt: NOW,
-};
-
-const defaultPrediction: DailyPrediction = {
-  id: crypto.randomUUID(),
-  date: getEstDateKey(),
-  teaserText:
-    "Tonight's top edge: loading dynamic signal from model. The edge engine keeps one lane focused on pace-curve and defensive mismatch spots.",
-  markdownContent:
-    "# LOCKIN Preview\n\n## Tonight's edge\n\n- Away team has superior transition efficiency on road (6th in pace tempo-adjusted points in last 7).\n- Home team gives up second-chance points above league average.\n- Lean: Away ML for controlled edge only.\n\n## Confidence\nMedium.\n\nUse your bankroll rules, never chase.",
-  isNoEdgeDay: false,
-  createdAt: NOW,
-  updatedAt: NOW,
-};
-
-const defaultBanner: SocialProofBanner = {
-  id: crypto.randomUUID(),
-  text: "Yesterday: 4-1 (+3.5u) | Last 7 Days: 18-9 (67% Win Rate)",
-  isActive: true,
-  updatedAt: NOW,
-};
-
-const teams = [
-  "LAL",
-  "BOS",
-  "DAL",
-  "MIA",
-  "GSW",
-  "HOU",
-  "PHI",
-];
-
-function makeGames(date: string): Game[] {
-  const today = new Date(`${date}T00:00:00-05:00`);
-  return teams.slice(0, 4).map((team, index) => {
-    const away = teams[(index + 2) % teams.length];
-    const status: Game["status"] = index === 0 ? "live" : index === 3 ? "final" : "upcoming";
-    const gameTimeEST = new Date(today.getTime() + index * 90 * 60 * 1000).toISOString();
-    return {
-      id: crypto.randomUUID(),
-      date,
-      awayTeam: away,
-      homeTeam: team,
-      gameTimeEST,
-      status,
-      awayScore: status === "final" ? 104 + index : null,
-      homeScore: status === "final" ? 112 + index : null,
-      awayMoneyline: index % 2 === 0 ? -105 + index : 120 + index * 2,
-      homeMoneyline: index % 2 === 0 ? 140 - index : -128 + index,
-      oddsSource: index % 2 === 0 ? "DraftKings" : "FanDuel",
-      apiGameId: `nba-${date}-${index + 1}`,
-    };
-  });
+function toNumber(value: RowValue): number {
+  return typeof value === "number" ? value : Number(value ?? 0);
 }
 
-const g: AppState = {
-  predictions: [defaultPrediction],
-  socialProofBanner: defaultBanner,
-  systemPrompts: [defaultPrompt],
-  games: makeGames(getEstDateKey()),
-  chatSessions: [],
-  chatMessages: [],
-  payments: [],
-  checkoutSessions: [],
-  magicLinks: [],
-};
+function toNullableNumber(value: RowValue): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
 
-declare global {
-  var __lockinStore: AppState | undefined;
+  return typeof value === "number" ? value : Number(value);
 }
 
-const globalState = (globalThis as unknown as { __lockinStore?: AppState }).__lockinStore || g;
-if (!(globalThis as { __lockinStore?: AppState }).__lockinStore) {
-  (globalThis as { __lockinStore?: AppState }).__lockinStore = globalState;
+function mapPrediction(row: Record<string, RowValue>): DailyPrediction {
+  return {
+    id: String(row.id),
+    date: String(row.date),
+    teaserText: String(row.teaser_text ?? ""),
+    markdownContent: String(row.markdown_content ?? ""),
+    isNoEdgeDay: Boolean(row.is_no_edge_day),
+    source: row.source === "admin" ? "admin" : "auto",
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapSocialProofBanner(row: Record<string, RowValue>): SocialProofBanner {
+  return {
+    id: String(row.id),
+    text: String(row.text ?? ""),
+    isActive: Boolean(row.is_active),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapSystemPrompt(row: Record<string, RowValue>): SystemPrompt {
+  return {
+    id: String(row.id),
+    content: String(row.content ?? ""),
+    version: toNumber(row.version),
+    isActive: Boolean(row.is_active),
+    createdAt: toIsoString(row.created_at),
+  };
+}
+
+function mapGame(row: Record<string, RowValue>): Game {
+  return {
+    id: String(row.id),
+    date: String(row.date),
+    awayTeam: String(row.away_team),
+    awayDisplayName: String(row.away_display_name),
+    awayRecord: String(row.away_record ?? ""),
+    awayLeader: String(row.away_leader ?? ""),
+    awayLogo: String(row.away_logo ?? ""),
+    homeTeam: String(row.home_team),
+    homeDisplayName: String(row.home_display_name),
+    homeRecord: String(row.home_record ?? ""),
+    homeLeader: String(row.home_leader ?? ""),
+    homeLogo: String(row.home_logo ?? ""),
+    gameTimeEST: String(row.game_time_est),
+    status: row.status === "live" || row.status === "final" ? row.status : "upcoming",
+    statusDetail: String(row.status_detail ?? ""),
+    awayScore: toNullableNumber(row.away_score),
+    homeScore: toNullableNumber(row.home_score),
+    awayMoneyline: toNumber(row.away_moneyline),
+    homeMoneyline: toNumber(row.home_moneyline),
+    oddsSource:
+      row.odds_source === "FanDuel" || row.odds_source === "BetMGM" ? row.odds_source : "DraftKings",
+    spread: String(row.spread ?? ""),
+    total: String(row.total ?? ""),
+    broadcast: String(row.broadcast ?? ""),
+    venue: String(row.venue ?? ""),
+    gameUrl: String(row.game_url ?? ""),
+    apiGameId: String(row.api_game_id ?? ""),
+  };
+}
+
+function mapChatSession(row: Record<string, RowValue>): ChatSession {
+  return {
+    id: String(row.id),
+    gameId: String(row.game_id),
+    sessionToken: String(row.session_token),
+    email: row.email ? String(row.email) : null,
+    questionLimit: toNumber(row.question_limit),
+    questionsUsed: toNumber(row.questions_used),
+    isPaid: Boolean(row.is_paid),
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapChatMessage(row: Record<string, RowValue>): ChatMessage {
+  return {
+    id: String(row.id),
+    chatSessionId: String(row.chat_session_id),
+    role: row.role === "assistant" ? "assistant" : "user",
+    content: String(row.content ?? ""),
+    createdAt: toIsoString(row.created_at),
+  };
+}
+
+function mapCheckoutSession(row: Record<string, RowValue>): CheckoutSession {
+  return {
+    id: String(row.id),
+    email: String(row.email),
+    type:
+      row.type === "match_chat" || row.type === "extra_questions"
+        ? row.type
+        : "daily_pick",
+    amount: toNumber(row.amount),
+    gameId: row.game_id ? String(row.game_id) : undefined,
+    chatSessionId: row.chat_session_id ? String(row.chat_session_id) : undefined,
+    status: row.status === "paid" ? "paid" : "pending",
+    createdAt: toIsoString(row.created_at),
+  };
+}
+
+function mapPayment(row: Record<string, RowValue>): Payment {
+  return {
+    id: String(row.id),
+    stripePaymentId: String(row.stripe_payment_id),
+    stripeCustomerEmail: String(row.stripe_customer_email),
+    type:
+      row.type === "match_chat" || row.type === "extra_questions"
+        ? row.type
+        : "daily_pick",
+    amount: toNumber(row.amount),
+    status: row.status === "pending" || row.status === "failed" ? row.status : "paid",
+    metadata: {
+      gameId: row.game_id ? String(row.game_id) : undefined,
+      chatSessionId: row.chat_session_id ? String(row.chat_session_id) : undefined,
+    },
+    grantedAt: toIsoString(row.granted_at),
+  };
+}
+
+function emptyPrediction(date: string): DailyPrediction {
+  const now = new Date().toISOString();
+  return {
+    id: `prediction-${date}`,
+    date,
+    teaserText: "",
+    markdownContent: "",
+    isNoEdgeDay: false,
+    source: "auto",
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 function amountForPayment(type: "daily_pick" | "match_chat" | "extra_questions"): number {
@@ -124,344 +192,554 @@ function amountForPayment(type: "daily_pick" | "match_chat" | "extra_questions")
   return 1;
 }
 
-export function ensureDateData(date = getEstDateKey()): void {
-  const existing = globalState.predictions.find((item) => item.date === date);
-  if (!existing) {
-    const pred = {
-      ...defaultPrediction,
-      id: crypto.randomUUID(),
-      date,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    globalState.predictions.push(pred);
-  }
-
-  const hasGames = globalState.games.some((game) => game.date === date);
-  if (!hasGames) {
-    globalState.games.push(...makeGames(date));
-  }
+function getDate(dateTime: string): string {
+  return getEstDateKey(new Date(dateTime));
 }
 
-export function getTodayPrediction(date = getEstDateKey()): DailyPrediction {
-  ensureDateData(date);
-  return globalState.predictions.find((item) => item.date === date)!;
-}
-
-export function listPredictions(): DailyPrediction[] {
-  return [...globalState.predictions].sort((a, b) => b.date.localeCompare(a.date));
-}
-
-export function savePrediction(input: {
-  id?: string;
-  date: string;
-  teaserText: string;
-  markdownContent: string;
-  isNoEdgeDay: boolean;
-}): DailyPrediction {
-  const now = new Date().toISOString();
-  ensureDateData(input.date);
-  const existing = globalState.predictions.find((item) => item.id === input.id || item.date === input.date);
-  if (existing) {
-    existing.date = input.date;
-    existing.teaserText = input.teaserText;
-    existing.markdownContent = input.markdownContent;
-    existing.isNoEdgeDay = input.isNoEdgeDay;
-    existing.updatedAt = now;
-    return existing;
-  }
-
-  const created: DailyPrediction = {
-    id: crypto.randomUUID(),
-    date: input.date,
-    teaserText: input.teaserText,
-    markdownContent: input.markdownContent,
-    isNoEdgeDay: input.isNoEdgeDay,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  globalState.predictions.push(created);
-  return created;
-}
-
-export function deletePrediction(id: string): void {
-  globalState.predictions = globalState.predictions.filter((item) => item.id !== id);
-}
-
-export function getSocialProofBanner(): SocialProofBanner | null {
-  if (!globalState.socialProofBanner?.isActive || !globalState.socialProofBanner.text.trim()) {
-    return null;
-  }
-  return globalState.socialProofBanner;
-}
-
-export function setSocialProofBanner(text: string): SocialProofBanner {
-  globalState.socialProofBanner = {
-    id: globalState.socialProofBanner?.id || crypto.randomUUID(),
-    text,
-    isActive: text.trim().length > 0,
-    updatedAt: new Date().toISOString(),
-  };
-  return globalState.socialProofBanner;
-}
-
-export function getActiveSystemPrompt(): SystemPrompt {
-  return globalState.systemPrompts.find((item) => item.isActive) || defaultPrompt;
-}
-
-export function listSystemPrompts(limit = 5): SystemPrompt[] {
-  return [...globalState.systemPrompts].sort((a, b) => b.version - a.version).slice(0, limit);
-}
-
-export function saveSystemPrompt(content: string): SystemPrompt {
-  const nextVersion = (globalState.systemPrompts.at(-1)?.version || 0) + 1;
-  globalState.systemPrompts = globalState.systemPrompts.map((item) => ({
-    ...item,
-    isActive: false,
-  }));
-
-  const created: SystemPrompt = {
-    id: crypto.randomUUID(),
-    content,
-    version: nextVersion,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  };
-
-  globalState.systemPrompts.push(created);
-  globalState.systemPrompts.sort((a, b) => a.version - b.version);
-  if (globalState.systemPrompts.length > 10) {
-    globalState.systemPrompts = globalState.systemPrompts.slice(-10);
-  }
-  return created;
-}
-
-export function getGames(date = getEstDateKey()): Game[] {
-  ensureDateData(date);
-  return globalState.games
-    .filter((item) => item.date === date)
-    .sort((a, b) => {
-      if (a.status === "final" && b.status !== "final") return 1;
-      if (a.status !== "final" && b.status === "final") return -1;
-      return new Date(a.gameTimeEST).getTime() - new Date(b.gameTimeEST).getTime();
-    });
-}
-
-export function setGames(date: string, games: Omit<Game, "id" | "date">[]): void {
-  globalState.games = globalState.games.filter((item) => item.date !== date);
-  globalState.games.push(
-    ...games.map((game) => ({
-      ...game,
-      id: crypto.randomUUID(),
-      date,
-    })),
-  );
-}
-
-export function createChatSession(gameId: string): ChatSession {
-  const now = new Date().toISOString();
-  const session: ChatSession = {
-    id: crypto.randomUUID(),
-    gameId,
-    sessionToken: crypto.randomUUID(),
-    email: null,
-    questionLimit: 0,
-    questionsUsed: 0,
-    isPaid: false,
-    createdAt: now,
-    updatedAt: now,
-  };
-  globalState.chatSessions.push(session);
-  return session;
-}
-
-export function getChatSession(sessionId: string): ChatSession | null {
-  return globalState.chatSessions.find((session) => session.id === sessionId) || null;
-}
-
-export function getChatMessages(sessionId: string): ChatMessage[] {
-  return globalState.chatMessages.filter((msg) => msg.chatSessionId === sessionId);
-}
-
-export function addChatMessage(sessionId: string, role: "user" | "assistant", content: string): ChatMessage {
-  const message: ChatMessage = {
-    id: crypto.randomUUID(),
-    chatSessionId: sessionId,
-    role,
-    content,
-    createdAt: new Date().toISOString(),
-  };
-  globalState.chatMessages.push(message);
-  return message;
-}
-
-export function touchSession(sessionId: string, data: Partial<Pick<ChatSession, "questionLimit" | "questionsUsed" | "isPaid" | "email">>): void {
-  const session = getChatSession(sessionId);
-  if (!session) return;
-
-  session.updatedAt = new Date().toISOString();
-  if (data.questionLimit !== undefined) session.questionLimit = data.questionLimit;
-  if (data.questionsUsed !== undefined) session.questionsUsed = data.questionsUsed;
-  if (data.isPaid !== undefined) session.isPaid = data.isPaid;
-  if (data.email !== undefined) session.email = data.email;
-}
-
-export function hasChatCapacity(sessionId: string): boolean {
-  const session = getChatSession(sessionId);
-  if (!session) return false;
-  return session.questionsUsed < session.questionLimit;
-}
-
-export function remainingQuestions(sessionId: string): number {
-  const session = getChatSession(sessionId);
-  if (!session) return 0;
-  return Math.max(0, session.questionLimit - session.questionsUsed);
-}
-
-export function createCheckoutSession(input: {
-  email: string;
-  type: "daily_pick" | "match_chat" | "extra_questions";
-  gameId?: string;
-  chatSessionId?: string;
-}): { id: string; amount: number } {
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const amount = amountForPayment(input.type);
-  const session: CheckoutSession = {
-    id,
-    email: input.email,
-    type: input.type,
-    amount,
-    gameId: input.gameId,
-    chatSessionId: input.chatSessionId,
-    status: "pending",
-    createdAt: now,
-  };
-  globalState.checkoutSessions = globalState.checkoutSessions.filter((item) => item.id !== id);
-  globalState.checkoutSessions.push(session);
-  return { id, amount };
-}
-
-export function getCheckoutSession(id: string): {
-  id: string;
-  email: string;
-  type: "daily_pick" | "match_chat" | "extra_questions";
-  amount: number;
-  gameId?: string;
-  chatSessionId?: string;
-  status: "pending" | "paid";
-  createdAt: string;
-} | null {
-  const session = globalState.checkoutSessions.find((item) => item.id === id);
-  return session || null;
-}
-
-export function completeCheckout(sessionId: string, paymentId: string): Payment | null {
-  const session = globalState.checkoutSessions.find((item) => item.id === sessionId);
-  if (!session || session.status === "paid") return null;
-
-  const now = new Date().toISOString();
-  session.status = "paid";
-
-  const payment: Payment = {
-    id: crypto.randomUUID(),
-    stripePaymentId: paymentId,
-    stripeCustomerEmail: session.email,
-    type: session.type,
-    amount: session.amount,
-    status: "paid",
-    metadata: {
-      gameId: session.gameId,
-      chatSessionId: session.chatSessionId,
-    },
-    grantedAt: now,
-  };
-
-  globalState.payments.push(payment);
-  if (session.type === "match_chat") {
-    const chatSession = getChatSession(session.chatSessionId ?? "");
-    touchSession(session.chatSessionId ?? "", {
-      isPaid: true,
-      questionLimit: Math.max(3, chatSession?.questionLimit || 0),
-      questionsUsed: 0,
-      email: session.email,
-    });
-  }
-
-  if (session.type === "extra_questions") {
-    touchSession(session.chatSessionId ?? "", {
-      questionLimit: (getChatSession(session.chatSessionId ?? "")?.questionLimit || 0) + 3,
-      email: session.email,
-    });
-  }
-
-  return payment;
-}
-
-function hasActiveDailyPayment(email: string, date: string): boolean {
-  return globalState.payments.some(
+async function hasActiveDailyPayment(email: string, date: string): Promise<boolean> {
+  const payments = await getPaymentForEmail(email);
+  return payments.some(
     (payment) =>
-      payment.stripeCustomerEmail.toLowerCase() === email.toLowerCase() &&
+      payment.status === "paid" &&
       payment.type === "daily_pick" &&
       getDate(payment.grantedAt) === date,
   );
 }
 
-function hasActiveChatPayment(email: string, sessionId: string): boolean {
-  return globalState.payments.some(
+async function hasActiveChatPayment(email: string, sessionId: string): Promise<boolean> {
+  const payments = await getPaymentForEmail(email);
+  return payments.some(
     (payment) =>
-      payment.stripeCustomerEmail.toLowerCase() === email.toLowerCase() &&
+      payment.status === "paid" &&
       payment.type !== "daily_pick" &&
       payment.metadata.chatSessionId === sessionId,
   );
 }
 
-function getDate(dateTime: string): string {
-  return getEstDateKey(new Date(dateTime));
+export async function getTodayPrediction(date = getEstDateKey()): Promise<DailyPrediction> {
+  const result = await query(
+    `SELECT * FROM predictions WHERE date = $1 LIMIT 1`,
+    [date],
+  );
+
+  if (!result.rows[0]) {
+    return emptyPrediction(date);
+  }
+
+  return mapPrediction(result.rows[0] as Record<string, RowValue>);
 }
 
-export function validateDailyToken(email: string): boolean {
+export async function listPredictions(): Promise<DailyPrediction[]> {
+  const result = await query(`SELECT * FROM predictions ORDER BY date DESC`);
+  return result.rows.map((row) => mapPrediction(row as Record<string, RowValue>));
+}
+
+export async function savePrediction(input: {
+  id?: string;
+  date: string;
+  teaserText: string;
+  markdownContent: string;
+  isNoEdgeDay: boolean;
+  source?: "auto" | "admin";
+}): Promise<DailyPrediction> {
+  const lookupParams = [];
+  const conditions = [];
+
+  if (input.id) {
+    lookupParams.push(input.id);
+    conditions.push(`id = $${lookupParams.length}`);
+  }
+
+  lookupParams.push(input.date);
+  conditions.push(`date = $${lookupParams.length}`);
+
+  const existing = await query(
+    `SELECT * FROM predictions WHERE ${conditions.join(" OR ")} LIMIT 1`,
+    lookupParams,
+  );
+
+  if (existing.rows[0]) {
+    const updated = await query(
+      `UPDATE predictions
+         SET date = $2,
+             teaser_text = $3,
+             markdown_content = $4,
+             is_no_edge_day = $5,
+             source = $6,
+             updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [
+        String(existing.rows[0].id),
+        input.date,
+        input.teaserText,
+        input.markdownContent,
+        input.isNoEdgeDay,
+        input.source ?? "admin",
+      ],
+    );
+    return mapPrediction(updated.rows[0] as Record<string, RowValue>);
+  }
+
+  const created = await query(
+    `INSERT INTO predictions (
+       id,
+       date,
+       teaser_text,
+       markdown_content,
+       is_no_edge_day,
+       source,
+       created_at,
+       updated_at
+     ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+     RETURNING *`,
+    [
+      crypto.randomUUID(),
+      input.date,
+      input.teaserText,
+      input.markdownContent,
+      input.isNoEdgeDay,
+      input.source ?? "admin",
+    ],
+  );
+
+  return mapPrediction(created.rows[0] as Record<string, RowValue>);
+}
+
+export async function deletePrediction(id: string): Promise<void> {
+  await query(`DELETE FROM predictions WHERE id = $1`, [id]);
+}
+
+export async function getSocialProofBanner(): Promise<SocialProofBanner | null> {
+  const result = await query(`SELECT * FROM social_proof_banner WHERE id = 'default' LIMIT 1`);
+  if (!result.rows[0]) {
+    return null;
+  }
+
+  const banner = mapSocialProofBanner(result.rows[0] as Record<string, RowValue>);
+  if (!banner.isActive || !banner.text.trim()) {
+    return null;
+  }
+
+  return banner;
+}
+
+export async function setSocialProofBanner(text: string): Promise<SocialProofBanner> {
+  const result = await query(
+    `INSERT INTO social_proof_banner (id, text, is_active, updated_at)
+     VALUES ('default', $1, $2, NOW())
+     ON CONFLICT (id) DO UPDATE
+       SET text = EXCLUDED.text,
+           is_active = EXCLUDED.is_active,
+           updated_at = NOW()
+     RETURNING *`,
+    [text, text.trim().length > 0],
+  );
+
+  return mapSocialProofBanner(result.rows[0] as Record<string, RowValue>);
+}
+
+export async function getActiveSystemPrompt(): Promise<SystemPrompt> {
+  const active = await query(
+    `SELECT * FROM system_prompts WHERE is_active = TRUE ORDER BY version DESC LIMIT 1`,
+  );
+
+  if (active.rows[0]) {
+    return mapSystemPrompt(active.rows[0] as Record<string, RowValue>);
+  }
+
+  const fallback = await query(`SELECT * FROM system_prompts ORDER BY version DESC LIMIT 1`);
+  return mapSystemPrompt(fallback.rows[0] as Record<string, RowValue>);
+}
+
+export async function listSystemPrompts(limit = 5): Promise<SystemPrompt[]> {
+  const result = await query(
+    `SELECT * FROM system_prompts ORDER BY version DESC LIMIT $1`,
+    [limit],
+  );
+  return result.rows.map((row) => mapSystemPrompt(row as Record<string, RowValue>));
+}
+
+export async function saveSystemPrompt(content: string): Promise<SystemPrompt> {
+  return withTransaction(async (client) => {
+    const versionResult = await client.query(
+      `SELECT COALESCE(MAX(version), 0) AS max_version FROM system_prompts`,
+    );
+    const nextVersion = toNumber(versionResult.rows[0].max_version) + 1;
+
+    await client.query(`UPDATE system_prompts SET is_active = FALSE WHERE is_active = TRUE`);
+
+    const created = await client.query(
+      `INSERT INTO system_prompts (id, content, version, is_active, created_at)
+       VALUES ($1, $2, $3, TRUE, NOW())
+       RETURNING *`,
+      [crypto.randomUUID(), content, nextVersion],
+    );
+
+    await client.query(
+      `DELETE FROM system_prompts
+       WHERE id IN (
+         SELECT id
+         FROM system_prompts
+         ORDER BY version DESC
+         OFFSET 10
+       )`,
+    );
+
+    return mapSystemPrompt(created.rows[0] as Record<string, RowValue>);
+  });
+}
+
+export async function getGames(date = getEstDateKey()): Promise<Game[]> {
+  const result = await query(
+    `SELECT *
+     FROM games
+     WHERE date = $1
+     ORDER BY CASE WHEN status = 'final' THEN 1 ELSE 0 END ASC, game_time_est ASC`,
+    [date],
+  );
+  return result.rows.map((row) => mapGame(row as Record<string, RowValue>));
+}
+
+export async function setGames(date: string, games: Game[]): Promise<void> {
+  await withTransaction(async (client) => {
+    await client.query(`DELETE FROM games WHERE date = $1`, [date]);
+
+    for (const game of games) {
+      await client.query(
+        `INSERT INTO games (
+           id,
+           date,
+           away_team,
+           away_display_name,
+           away_record,
+           away_leader,
+           away_logo,
+           home_team,
+           home_display_name,
+           home_record,
+           home_leader,
+           home_logo,
+           game_time_est,
+           status,
+           status_detail,
+           away_score,
+           home_score,
+           away_moneyline,
+           home_moneyline,
+           odds_source,
+           spread,
+           total,
+           broadcast,
+           venue,
+           game_url,
+           api_game_id
+         ) VALUES (
+           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+           $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
+         )`,
+        [
+          game.id,
+          date,
+          game.awayTeam,
+          game.awayDisplayName,
+          game.awayRecord,
+          game.awayLeader,
+          game.awayLogo,
+          game.homeTeam,
+          game.homeDisplayName,
+          game.homeRecord,
+          game.homeLeader,
+          game.homeLogo,
+          game.gameTimeEST,
+          game.status,
+          game.statusDetail,
+          game.awayScore,
+          game.homeScore,
+          game.awayMoneyline,
+          game.homeMoneyline,
+          game.oddsSource,
+          game.spread,
+          game.total,
+          game.broadcast,
+          game.venue,
+          game.gameUrl,
+          game.apiGameId,
+        ],
+      );
+    }
+  });
+}
+
+export async function createChatSession(gameId: string): Promise<ChatSession> {
+  const created = await query(
+    `INSERT INTO chat_sessions (
+       id,
+       game_id,
+       session_token,
+       email,
+       question_limit,
+       questions_used,
+       is_paid,
+       created_at,
+       updated_at
+     ) VALUES ($1, $2, $3, NULL, 0, 0, FALSE, NOW(), NOW())
+     RETURNING *`,
+    [crypto.randomUUID(), gameId, crypto.randomUUID()],
+  );
+
+  return mapChatSession(created.rows[0] as Record<string, RowValue>);
+}
+
+export async function getChatSession(sessionId: string): Promise<ChatSession | null> {
+  const result = await query(`SELECT * FROM chat_sessions WHERE id = $1 LIMIT 1`, [sessionId]);
+  return result.rows[0] ? mapChatSession(result.rows[0] as Record<string, RowValue>) : null;
+}
+
+export async function getChatMessages(sessionId: string): Promise<ChatMessage[]> {
+  const result = await query(
+    `SELECT * FROM chat_messages WHERE chat_session_id = $1 ORDER BY created_at ASC, id ASC`,
+    [sessionId],
+  );
+  return result.rows.map((row) => mapChatMessage(row as Record<string, RowValue>));
+}
+
+export async function addChatMessage(
+  sessionId: string,
+  role: "user" | "assistant",
+  content: string,
+): Promise<ChatMessage> {
+  const created = await query(
+    `INSERT INTO chat_messages (id, chat_session_id, role, content, created_at)
+     VALUES ($1, $2, $3, $4, NOW())
+     RETURNING *`,
+    [crypto.randomUUID(), sessionId, role, content],
+  );
+
+  return mapChatMessage(created.rows[0] as Record<string, RowValue>);
+}
+
+export async function touchSession(
+  sessionId: string,
+  data: Partial<Pick<ChatSession, "questionLimit" | "questionsUsed" | "isPaid" | "email">>,
+): Promise<void> {
+  const updates = ["updated_at = NOW()"];
+  const values: Array<string | number | boolean | null> = [];
+
+  if (data.questionLimit !== undefined) {
+    values.push(data.questionLimit);
+    updates.push(`question_limit = $${values.length}`);
+  }
+
+  if (data.questionsUsed !== undefined) {
+    values.push(data.questionsUsed);
+    updates.push(`questions_used = $${values.length}`);
+  }
+
+  if (data.isPaid !== undefined) {
+    values.push(data.isPaid);
+    updates.push(`is_paid = $${values.length}`);
+  }
+
+  if (data.email !== undefined) {
+    values.push(data.email);
+    updates.push(`email = $${values.length}`);
+  }
+
+  values.push(sessionId);
+  await query(
+    `UPDATE chat_sessions SET ${updates.join(", ")} WHERE id = $${values.length}`,
+    values,
+  );
+}
+
+export async function hasChatCapacity(sessionId: string): Promise<boolean> {
+  const result = await query(
+    `SELECT question_limit, questions_used FROM chat_sessions WHERE id = $1 LIMIT 1`,
+    [sessionId],
+  );
+
+  if (!result.rows[0]) {
+    return false;
+  }
+
+  return toNumber(result.rows[0].questions_used) < toNumber(result.rows[0].question_limit);
+}
+
+export async function remainingQuestions(sessionId: string): Promise<number> {
+  const result = await query(
+    `SELECT question_limit, questions_used FROM chat_sessions WHERE id = $1 LIMIT 1`,
+    [sessionId],
+  );
+
+  if (!result.rows[0]) {
+    return 0;
+  }
+
+  return Math.max(0, toNumber(result.rows[0].question_limit) - toNumber(result.rows[0].questions_used));
+}
+
+export async function createCheckoutSession(input: {
+  email: string;
+  type: "daily_pick" | "match_chat" | "extra_questions";
+  gameId?: string;
+  chatSessionId?: string;
+}): Promise<{ id: string; amount: number }> {
+  const id = crypto.randomUUID();
+  const amount = amountForPayment(input.type);
+
+  await query(
+    `INSERT INTO checkout_sessions (
+       id,
+       email,
+       type,
+       amount,
+       game_id,
+       chat_session_id,
+       status,
+       created_at
+     ) VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW())`,
+    [id, input.email, input.type, amount, input.gameId ?? null, input.chatSessionId ?? null],
+  );
+
+  return { id, amount };
+}
+
+export async function getCheckoutSession(id: string): Promise<CheckoutSession | null> {
+  const result = await query(`SELECT * FROM checkout_sessions WHERE id = $1 LIMIT 1`, [id]);
+  return result.rows[0] ? mapCheckoutSession(result.rows[0] as Record<string, RowValue>) : null;
+}
+
+export async function completeCheckout(sessionId: string, paymentId: string): Promise<Payment | null> {
+  return withTransaction(async (client) => {
+    const checkoutResult = await client.query(
+      `SELECT * FROM checkout_sessions WHERE id = $1 FOR UPDATE`,
+      [sessionId],
+    );
+    const checkoutRow = checkoutResult.rows[0] as Record<string, RowValue> | undefined;
+
+    if (!checkoutRow || checkoutRow.status === "paid") {
+      return null;
+    }
+
+    const checkout = mapCheckoutSession(checkoutRow);
+
+    await client.query(
+      `UPDATE checkout_sessions SET status = 'paid' WHERE id = $1`,
+      [sessionId],
+    );
+
+    const createdPayment = await client.query(
+      `INSERT INTO payments (
+         id,
+         stripe_payment_id,
+         stripe_customer_email,
+         type,
+         amount,
+         status,
+         game_id,
+         chat_session_id,
+         granted_at
+       ) VALUES ($1, $2, $3, $4, $5, 'paid', $6, $7, NOW())
+       RETURNING *`,
+      [
+        crypto.randomUUID(),
+        paymentId,
+        checkout.email,
+        checkout.type,
+        checkout.amount,
+        checkout.gameId ?? null,
+        checkout.chatSessionId ?? null,
+      ],
+    );
+
+    if (checkout.type === "match_chat" && checkout.chatSessionId) {
+      await client.query(
+        `UPDATE chat_sessions
+         SET is_paid = TRUE,
+             question_limit = GREATEST(3, question_limit),
+             questions_used = 0,
+             email = $2,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [checkout.chatSessionId, checkout.email],
+      );
+    }
+
+    if (checkout.type === "extra_questions" && checkout.chatSessionId) {
+      await client.query(
+        `UPDATE chat_sessions
+         SET question_limit = question_limit + 3,
+             email = $2,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [checkout.chatSessionId, checkout.email],
+      );
+    }
+
+    return mapPayment(createdPayment.rows[0] as Record<string, RowValue>);
+  });
+}
+
+export async function validateDailyToken(email: string): Promise<boolean> {
   return hasActiveDailyPayment(email, getEstDateKey());
 }
 
-export function createMagicLink(email: string): string | null {
+export async function createMagicLink(email: string): Promise<string | null> {
   const today = getEstDateKey();
-  if (!hasActiveDailyPayment(email, today)) return null;
+  if (!(await hasActiveDailyPayment(email, today))) {
+    return null;
+  }
 
   const token = crypto.randomBytes(24).toString("hex");
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-  const magic: MagicLinkToken = {
-    id: crypto.randomUUID(),
-    email,
-    token,
-    expiresAt,
-    isUsed: false,
-    createdAt: new Date().toISOString(),
-  };
-  globalState.magicLinks = globalState.magicLinks.filter((item) => item.token !== token);
-  globalState.magicLinks.push(magic);
+  await query(
+    `INSERT INTO magic_links (id, email, token, expires_at, is_used, created_at)
+     VALUES ($1, $2, $3, NOW() + INTERVAL '1 hour', FALSE, NOW())`,
+    [crypto.randomUUID(), email, token],
+  );
+
   return token;
 }
 
-export function consumeMagicLink(token: string): { email: string } | null {
-  const item = globalState.magicLinks.find((entry) => entry.token === token);
-  if (!item || item.isUsed) return null;
-  if (new Date(item.expiresAt).getTime() < Date.now()) return null;
-  item.isUsed = true;
-  return { email: item.email };
+export async function consumeMagicLink(token: string): Promise<{ email: string } | null> {
+  const result = await query(
+    `UPDATE magic_links
+     SET is_used = TRUE
+     WHERE token = $1
+       AND is_used = FALSE
+       AND expires_at >= NOW()
+     RETURNING email`,
+    [token],
+  );
+
+  if (!result.rows[0]) {
+    return null;
+  }
+
+  return { email: String(result.rows[0].email) };
 }
 
-export function getPaymentForEmail(email: string): Payment[] {
-  return globalState.payments.filter((item) => item.stripeCustomerEmail.toLowerCase() === email.toLowerCase());
+export async function getPaymentForEmail(email: string): Promise<Payment[]> {
+  const result = await query(
+    `SELECT *
+     FROM payments
+     WHERE LOWER(stripe_customer_email) = LOWER($1)
+     ORDER BY granted_at DESC`,
+    [email],
+  );
+
+  return result.rows.map((row) => mapPayment(row as Record<string, RowValue>));
 }
 
-export function getAccessState(email: string, sessionId?: string): {
+export async function getAccessState(
+  email: string,
+  sessionId?: string,
+): Promise<{
   daily: boolean;
   chat: boolean;
-} {
+}> {
   return {
-    daily: validateDailyToken(email),
-    chat: !!sessionId ? hasActiveChatPayment(email, sessionId) : false,
+    daily: await validateDailyToken(email),
+    chat: sessionId ? await hasActiveChatPayment(email, sessionId) : false,
   };
 }

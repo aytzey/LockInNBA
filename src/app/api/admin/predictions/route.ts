@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
-  return NextResponse.json({ predictions: listPredictions() });
+  return NextResponse.json({ predictions: await listPredictions() });
 }
 
 export async function POST(request: NextRequest) {
@@ -38,12 +38,13 @@ export async function POST(request: NextRequest) {
     ? markdownContent || "No official lock today. Protect your bankroll and only play your game."
     : markdownContent;
 
-  const prediction = savePrediction({
+  const prediction = await savePrediction({
     id: body.id,
     date,
     teaserText: normalizedTeaserText,
     markdownContent: normalizedMarkdown,
     isNoEdgeDay,
+    source: "admin",
   });
 
   return NextResponse.json({ prediction });
@@ -57,6 +58,6 @@ export async function DELETE(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const id = body?.id as string | undefined;
   if (!id) return NextResponse.json({ message: "id required" }, { status: 400 });
-  deletePrediction(id);
+  await deletePrediction(id);
   return NextResponse.json({ success: true });
 }
