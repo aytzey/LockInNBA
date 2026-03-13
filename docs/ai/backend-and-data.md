@@ -123,7 +123,8 @@ That is why `getPublicGames()` does this:
 1. fetch and persist the daily fixture once when the DB has no slate for that EST date
 2. serve the cached schedule from Postgres before tipoff
 3. switch to direct ESPN no-store reads only when a scheduled game is near/after tipoff or already live
-4. merge the live snapshot over cached betting context and write it back asynchronously so finals eventually settle in DB
+4. send CDN-cacheable headers for pre-tipoff fixture reads, but keep live windows `no-store`
+5. merge the live snapshot over cached betting context and write it back asynchronously so finals eventually settle in DB
 
 Do not "simplify" this back into a DB-only path unless product requirements change.
 

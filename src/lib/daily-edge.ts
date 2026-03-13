@@ -43,6 +43,7 @@ export interface PublicGamesResult {
   updatedAt: string | null;
   refreshed: boolean;
   source: "cache" | "live";
+  cacheControl: "fixture" | "volatile";
   cacheSnapshot?: Game[];
 }
 
@@ -206,6 +207,7 @@ export async function getPublicGames(date = getEstDateKey()): Promise<PublicGame
     return {
       ...result,
       source: "cache",
+      cacheControl: "volatile",
     };
   }
 
@@ -214,10 +216,13 @@ export async function getPublicGames(date = getEstDateKey()): Promise<PublicGame
     return {
       ...result,
       source: "cache",
+      cacheControl: shouldTrackStartedGames(date, result.games) ? "volatile" : "fixture",
     };
   }
 
-  if (shouldTrackStartedGames(date, cachedGames)) {
+  const shouldUseLiveWindow = shouldTrackStartedGames(date, cachedGames);
+
+  if (shouldUseLiveWindow) {
     try {
       const liveSnapshot = await fetchTodayGames(date, { bypassCache: true });
       const mergedGames = mergeLatestGames(cachedGames, liveSnapshot);
@@ -231,6 +236,7 @@ export async function getPublicGames(date = getEstDateKey()): Promise<PublicGame
         updatedAt: new Date().toISOString(),
         refreshed: true,
         source: "live",
+        cacheControl: "volatile",
         cacheSnapshot: shouldPersistSnapshot ? mergedGames : undefined,
       };
     } catch {
@@ -243,6 +249,7 @@ export async function getPublicGames(date = getEstDateKey()): Promise<PublicGame
     updatedAt: lastUpdatedAt,
     refreshed: false,
     source: "cache",
+    cacheControl: shouldUseLiveWindow ? "volatile" : "fixture",
   };
 }
 

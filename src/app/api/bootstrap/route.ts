@@ -15,6 +15,10 @@ export async function GET() {
     getSiteCopy(),
   ]);
   const cacheSnapshot = gamesResult.cacheSnapshot;
+  const cacheControl =
+    gamesResult.cacheControl === "fixture"
+      ? "public, max-age=0, s-maxage=60, stale-while-revalidate=300"
+      : "no-store, max-age=0";
 
   if (cacheSnapshot) {
     after(async () => {
@@ -53,7 +57,7 @@ export async function GET() {
     },
     {
       headers: {
-        "Cache-Control": "no-store, max-age=0",
+        "Cache-Control": cacheControl,
       },
     },
   );
