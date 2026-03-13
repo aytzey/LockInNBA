@@ -512,69 +512,82 @@ export async function setGames(date: string, games: Game[]): Promise<void> {
   await withTransaction(async (client) => {
     await client.query(`DELETE FROM games WHERE date = $1`, [date]);
 
-    for (const game of games) {
-      await client.query(
-        `INSERT INTO games (
-           id,
-           date,
-           away_team,
-           away_display_name,
-           away_record,
-           away_leader,
-           away_logo,
-           home_team,
-           home_display_name,
-           home_record,
-           home_leader,
-           home_logo,
-           game_time_est,
-           status,
-           status_detail,
-           away_score,
-           home_score,
-           away_moneyline,
-           home_moneyline,
-           odds_source,
-           spread,
-           total,
-           broadcast,
-           venue,
-           game_url,
-           api_game_id
-         ) VALUES (
-           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-           $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
-         )`,
-        [
-          game.id,
-          date,
-          game.awayTeam,
-          game.awayDisplayName,
-          game.awayRecord,
-          game.awayLeader,
-          game.awayLogo,
-          game.homeTeam,
-          game.homeDisplayName,
-          game.homeRecord,
-          game.homeLeader,
-          game.homeLogo,
-          game.gameTimeEST,
-          game.status,
-          game.statusDetail,
-          game.awayScore,
-          game.homeScore,
-          game.awayMoneyline,
-          game.homeMoneyline,
-          game.oddsSource,
-          game.spread,
-          game.total,
-          game.broadcast,
-          game.venue,
-          game.gameUrl,
-          game.apiGameId,
-        ],
-      );
+    if (games.length === 0) {
+      return;
     }
+
+    const values: Array<string | number | null> = [];
+    const rows = games.map((game, index) => {
+      const offset = index * 26;
+      values.push(
+        game.id,
+        date,
+        game.awayTeam,
+        game.awayDisplayName,
+        game.awayRecord,
+        game.awayLeader,
+        game.awayLogo,
+        game.homeTeam,
+        game.homeDisplayName,
+        game.homeRecord,
+        game.homeLeader,
+        game.homeLogo,
+        game.gameTimeEST,
+        game.status,
+        game.statusDetail,
+        game.awayScore,
+        game.homeScore,
+        game.awayMoneyline,
+        game.homeMoneyline,
+        game.oddsSource,
+        game.spread,
+        game.total,
+        game.broadcast,
+        game.venue,
+        game.gameUrl,
+        game.apiGameId,
+      );
+
+      return `(
+        $${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7},
+        $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13},
+        $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17}, $${offset + 18}, $${offset + 19},
+        $${offset + 20}, $${offset + 21}, $${offset + 22}, $${offset + 23}, $${offset + 24}, $${offset + 25},
+        $${offset + 26}
+      )`;
+    });
+
+    await client.query(
+      `INSERT INTO games (
+         id,
+         date,
+         away_team,
+         away_display_name,
+         away_record,
+         away_leader,
+         away_logo,
+         home_team,
+         home_display_name,
+         home_record,
+         home_leader,
+         home_logo,
+         game_time_est,
+         status,
+         status_detail,
+         away_score,
+         home_score,
+         away_moneyline,
+         home_moneyline,
+         odds_source,
+         spread,
+         total,
+         broadcast,
+         venue,
+         game_url,
+         api_game_id
+       ) VALUES ${rows.join(",")}`,
+      values,
+    );
   });
 }
 
