@@ -91,6 +91,22 @@ export default function HomePage() {
   const [shareMode, setShareMode] = useState<"daily" | "chat">("daily");
 
   const preview = splitTeaser(todayPrediction?.teaserText || "");
+  const teaserGuardTerms = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          games.flatMap((game) => [
+            game.awayTeam,
+            game.homeTeam,
+            game.awayDisplayName,
+            game.homeDisplayName,
+            ...game.awayDisplayName.split(/\s+/),
+            ...game.homeDisplayName.split(/\s+/),
+          ]),
+        ),
+      ).filter((term) => term && term.length > 2),
+    [games],
+  );
   const effectiveSocialProofMessages = useMemo(
     () => buildSocialProofMessages(socialProofMessages, Boolean(todayPrediction?.isNoEdgeDay)),
     [socialProofMessages, todayPrediction?.isNoEdgeDay],
@@ -409,6 +425,7 @@ export default function HomePage() {
           priceSubtext={effectiveDailyPriceSubtext}
           noEdgeMessage={siteCopy.noEdgeMessage}
           isPromoActive={isPromoActive}
+          teaserGuardTerms={teaserGuardTerms}
         />
 
         <section ref={gameSectionRef} className="space-y-5 md:space-y-6">

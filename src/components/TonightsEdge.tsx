@@ -22,14 +22,43 @@ interface TonightsEdgeProps {
   priceSubtext: string;
   noEdgeMessage: string;
   isPromoActive: boolean;
+  teaserGuardTerms: string[];
 }
 
-function splitTeaser(text: string): { headline: string; blurredLines: string[] } {
+function containsSpoiler(text: string, terms: string[]): boolean {
+  const normalized = text.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  if (/[A-Z]{2,4}\s*@\s*[A-Z]{2,4}/.test(normalized) || /\bvs\.?\b/i.test(normalized)) {
+    return true;
+  }
+
+  return terms.some((term) => {
+    const trimmed = term.trim();
+    if (!trimmed) {
+      return false;
+    }
+
+    if (trimmed.includes(" ")) {
+      return normalized.toLowerCase().includes(trimmed.toLowerCase());
+    }
+
+    const pattern = new RegExp(`\\b${trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    return pattern.test(normalized);
+  });
+}
+
+function splitTeaser(text: string, guardTerms: string[]): { headline: string; blurredLines: string[] } {
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
-  const headline = lines.slice(0, 2).join(" ") || "One game lit up every signal tonight. The math is screaming.";
+  const spoilerDetected = containsSpoiler(lines.join(" "), guardTerms);
+  const headline = !spoilerDetected && lines.length > 0
+    ? lines.slice(0, 2).join(" ")
+    : "One game lit up every signal tonight. The math is screaming.";
   const blurredLines = lines.slice(2);
 
-  if (blurredLines.length > 0) {
+  if (!spoilerDetected && blurredLines.length > 0) {
     return { headline, blurredLines };
   }
 
@@ -56,10 +85,11 @@ export default function TonightsEdge({
   priceSubtext,
   noEdgeMessage,
   isPromoActive,
+  teaserGuardTerms,
 }: TonightsEdgeProps) {
   const noEdge = Boolean(prediction?.isNoEdgeDay);
   const hasPrediction = Boolean(prediction?.hasPrediction && prediction?.teaserText.trim());
-  const preview = splitTeaser((hasPrediction ? prediction?.teaserText : "") || "");
+  const preview = splitTeaser((hasPrediction ? prediction?.teaserText : "") || "", teaserGuardTerms);
   return (
     <TonightsEdgeContent
       isLoading={isLoading}
