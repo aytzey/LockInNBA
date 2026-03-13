@@ -91,6 +91,7 @@ export default function HomePage() {
   const gameSectionRef = useRef<HTMLDivElement>(null);
   const hasRetriedEmptyBoardRef = useRef(false);
 
+  const [hasMounted, setHasMounted] = useState(false);
   const [isBoardLoading, setIsBoardLoading] = useState(true);
   const [isPredictionLoading, setIsPredictionLoading] = useState(true);
   const [todayPrediction, setTodayPrediction] = useState<TodayPrediction | null>(null);
@@ -187,6 +188,10 @@ export default function HomePage() {
     } catch {
       // keep existing state on network errors
     }
+  }, []);
+
+  useEffect(() => {
+    setHasMounted(true);
   }, []);
 
   useEffect(() => {
@@ -479,7 +484,7 @@ export default function HomePage() {
 
         <TonightsEdge
           prediction={todayPrediction}
-          isLoading={isPredictionLoading && !dailyUnlocked}
+          isLoading={hasMounted && isPredictionLoading && !dailyUnlocked}
           dailyUnlocked={dailyUnlocked}
           dailyMarkdown={dailyMarkdown}
           onUnlock={unlockDailyPrediction}
@@ -509,7 +514,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {isBoardLoading ? (
+          {isBoardLoading && hasMounted ? (
             <GameListSkeleton />
           ) : games.length === 0 ? (
             <div className="empty-board-card">
