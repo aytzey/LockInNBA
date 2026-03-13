@@ -38,7 +38,7 @@ export const DEFAULT_SOCIAL_PROOF_MESSAGES = [
 ];
 export const DEFAULT_NO_EDGE_BANNER_PREFIX = "Today: No Edge — Protecting Your Bankroll";
 
-const DEFAULT_SITE_COPY_CONTENT = {
+export const DEFAULT_SITE_COPY_CONTENT = {
   dailyCtaText: "Unlock Tonight's Edge",
   dailyPriceSubtext: "$5 one-time pass",
   noEdgeMessage: "We passed on 90% of this week's games. We only bet when the math screams.",
