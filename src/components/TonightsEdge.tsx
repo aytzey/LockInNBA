@@ -65,7 +65,7 @@ export default function TonightsEdge({
           window.location.href = checkout.checkoutUrl;
           return;
         }
-        token = await waitForCheckout(checkout.sessionId);
+        token = (await waitForCheckout(checkout.sessionId)).accessToken || "";
         try { popup.close(); } catch {}
       }
 

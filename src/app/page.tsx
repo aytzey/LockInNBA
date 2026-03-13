@@ -11,7 +11,7 @@ import RestoreAccess from "@/components/RestoreAccess";
 import ShareCard from "@/components/ShareCard";
 import { GameListSkeleton } from "@/components/LoadingSkeleton";
 import type { Game, TodayPrediction, ChatMessage } from "@/components/types";
-import { DAILY_TOKEN_KEY } from "@/components/utils";
+import { CHAT_SESSION_RESTORE_PREFIX, CHAT_TOKEN_PREFIX, DAILY_TOKEN_KEY } from "@/components/utils";
 import { pollCheckoutStatus } from "@/components/api";
 
 function splitTeaser(text: string): { headline: string; body: string } {
@@ -119,7 +119,7 @@ export default function HomePage() {
   useEffect(() => {
     async function init() {
       try {
-        const [pRes, , bRes] = await Promise.all([
+        const [pRes, gamesBody, bRes] = await Promise.all([
           fetch("/api/predictions/today"),
           fetchGames(),
           fetch("/api/social-proof"),
@@ -140,10 +140,25 @@ export default function HomePage() {
           // Poll for payment completion
           const poll = async () => {
             for (let i = 0; i < 20; i++) {
-              const token = await pollCheckoutStatus(checkoutSessionId).catch(() => null);
-              if (token) {
-                window.localStorage.setItem(DAILY_TOKEN_KEY, token);
-                await unlockDailyPrediction(token);
+              const result = await pollCheckoutStatus(checkoutSessionId).catch(() => null);
+              if (result?.accessToken) {
+                if (result.type === "daily_pick") {
+                  window.localStorage.setItem(DAILY_TOKEN_KEY, result.accessToken);
+                  await unlockDailyPrediction(result.accessToken);
+                  return;
+                }
+
+                if (result.chatSessionId && result.gameId) {
+                  window.localStorage.setItem(`${CHAT_TOKEN_PREFIX}${result.chatSessionId}`, result.accessToken);
+                  window.localStorage.setItem(`${CHAT_SESSION_RESTORE_PREFIX}${result.gameId}`, result.chatSessionId);
+                  const restoredGame = ((gamesBody?.games as Game[] | undefined) || []).find(
+                    (game) => game.id === result.gameId,
+                  );
+                  if (restoredGame) {
+                    setSelectedGame(restoredGame);
+                    setShareMode("chat");
+                  }
+                }
                 return;
               }
               await new Promise((r) => setTimeout(r, 2000));

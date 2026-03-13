@@ -35,6 +35,9 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     paid: true,
+    type: checkout.type,
+    chatSessionId: checkout.chatSessionId ?? null,
+    gameId: checkout.gameId ?? null,
     accessToken: issueAccessToken(tokenPayload),
   });
 }

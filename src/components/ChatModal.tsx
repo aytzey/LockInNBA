@@ -4,7 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import type { Game, ChatMessage, ChatSessionState } from "./types";
-import { formatEstTime, moneyline, validateEmail, CHAT_TOKEN_PREFIX } from "./utils";
+import {
+  CHAT_SESSION_RESTORE_PREFIX,
+  CHAT_TOKEN_PREFIX,
+  formatEstTime,
+  moneyline,
+  validateEmail,
+} from "./utils";
 import { createCheckout, waitForCheckout, mockComplete } from "./api";
 import MarkdownContent from "./MarkdownContent";
 
@@ -48,6 +54,25 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
   useEffect(() => {
     async function initSession() {
       try {
+        const restoredSessionId = window.localStorage.getItem(`${CHAT_SESSION_RESTORE_PREFIX}${game.id}`);
+        if (restoredSessionId) {
+          const restoredResponse = await fetch(`/api/chat/session/${restoredSessionId}`);
+          const restoredData = await restoredResponse.json().catch(() => null);
+          if (restoredResponse.ok && restoredData?.session?.gameId === game.id) {
+            const session = restoredData.session as ChatSessionState;
+            setChatSession(session);
+            setChatQuestionsRemaining(restoredData.questionsRemaining ?? 0);
+            setChatMessages(restoredData.messages ?? []);
+            onMessagesChange(restoredData.messages ?? []);
+            setChatEmail(session.email || "");
+            const restoredToken = window.localStorage.getItem(`${CHAT_TOKEN_PREFIX}${session.id}`);
+            setChatToken(restoredToken || null);
+            return;
+          }
+
+          window.localStorage.removeItem(`${CHAT_SESSION_RESTORE_PREFIX}${game.id}`);
+        }
+
         const res = await fetch("/api/chat/session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -111,13 +136,15 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
     } else {
       const popup = window.open(checkout.checkoutUrl, "lemonsqueezy", "width=460,height=720,left=200,top=100");
       if (!popup) {
+        window.localStorage.setItem(`${CHAT_SESSION_RESTORE_PREFIX}${chatSession.gameId}`, chatSession.id);
         window.location.href = checkout.checkoutUrl;
         return;
       }
-      token = await waitForCheckout(checkout.sessionId);
+      token = (await waitForCheckout(checkout.sessionId)).accessToken || "";
       try { popup.close(); } catch {}
     }
 
+    window.localStorage.setItem(`${CHAT_SESSION_RESTORE_PREFIX}${chatSession.gameId}`, chatSession.id);
     window.localStorage.setItem(`${CHAT_TOKEN_PREFIX}${chatSession.id}`, token);
     setChatToken(token);
     await refreshChatSession(chatSession.id);
