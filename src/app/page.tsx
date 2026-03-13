@@ -439,7 +439,7 @@ export default function HomePage() {
       <div className="aurora-bg" />
       <PromoBanner promoBanner={promoBanner} />
 
-      <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col gap-6 px-4 py-6 pb-16 md:gap-8 md:px-8 md:py-8">
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col gap-4 px-3 py-4 pb-12 md:gap-8 md:px-8 md:py-8 md:pb-16">
         <Header note={siteCopy.headerRightText} />
 
         <SocialProofBanner messages={effectiveSocialProofMessages} />
@@ -460,10 +460,10 @@ export default function HomePage() {
           teaserGuardTerms={teaserGuardTerms}
         />
 
-        <section ref={gameSectionRef} className="space-y-5 md:space-y-6">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="space-y-2">
-              <h2 className="heading text-[1.6rem] text-[color:var(--pure-white)] md:text-[1.9rem]">
+        <section ref={gameSectionRef} className="space-y-4 md:space-y-6">
+          <div className="flex flex-wrap items-end justify-between gap-3 md:gap-4">
+            <div className="space-y-1 md:space-y-2">
+              <h2 className="heading text-[1.3rem] text-[color:var(--pure-white)] md:text-[1.9rem]">
                 Tonight&apos;s Matchups
               </h2>
               <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--silver-gray)]">
@@ -484,32 +484,32 @@ export default function HomePage() {
               <p className="empty-board-card__body">Check back at 2 PM EST.</p>
             </div>
           ) : (
-            <div className="space-y-6 md:space-y-8">
+            <div className="space-y-5 md:space-y-8">
               {liveGames.length > 0 ? (
-                <div className="space-y-4">
+                <div className="space-y-3 md:space-y-4">
                   <div className="board-group-label board-group-label--live">
                     <span className="live-dot" />
                     LIVE
                   </div>
-                  <div className="grid gap-5 xl:grid-cols-2">
+                  <div className="grid gap-3 md:gap-5 xl:grid-cols-2">
                     {renderGameSection(liveGames)}
                   </div>
                 </div>
               ) : null}
 
               {upcomingGames.length > 0 ? (
-                <div className="space-y-4">
+                <div className="space-y-3 md:space-y-4">
                   <div className="board-group-label">UPCOMING</div>
-                  <div className="grid gap-5 xl:grid-cols-2">
+                  <div className="grid gap-3 md:gap-5 xl:grid-cols-2">
                     {renderGameSection(upcomingGames)}
                   </div>
                 </div>
               ) : null}
 
               {finalGames.length > 0 ? (
-                <div className="space-y-4">
+                <div className="space-y-3 md:space-y-4">
                   <div className="board-group-label">FINAL</div>
-                  <div className="grid gap-5 xl:grid-cols-2">
+                  <div className="grid gap-3 md:gap-5 xl:grid-cols-2">
                     {renderGameSection(finalGames)}
                   </div>
                 </div>
