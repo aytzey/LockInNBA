@@ -22,11 +22,19 @@ const EMPTY_BOARD_POLL_MS = 60_000;
 const BOOTSTRAP_TIMEOUT_MS = 6_000;
 const GAMES_FETCH_TIMEOUT_MS = 8_000;
 const FALLBACK_FETCH_TIMEOUT_MS = 5_000;
+const INIT_SAFETY_TIMEOUT_MS = 12_000;
 
 function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timeoutId));
+}
+
+function jsonWithTimeout<T>(response: Response, timeoutMs: number): Promise<T | null> {
+  return Promise.race([
+    response.json() as Promise<T>,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+  ]);
 }
 const DEFAULT_SOCIAL_PROOF_MESSAGES = [
   "This Week: 5-0 (100%)",
@@ -133,7 +141,10 @@ export default function HomePage() {
         return null;
       }
 
-      const body = await response.json();
+      const body = await jsonWithTimeout(response, GAMES_FETCH_TIMEOUT_MS);
+      if (!body) {
+        return null;
+      }
       const nextGames = Array.isArray(body?.games) ? (body.games as Game[]) : null;
       if (nextGames) {
         setGames((currentGames) => {
@@ -179,6 +190,14 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    const safetyTimeoutId = window.setTimeout(() => {
+      if (!cancelled) {
+        setIsBoardLoading(false);
+        setIsPredictionLoading(false);
+      }
+    }, INIT_SAFETY_TIMEOUT_MS);
+
     async function init() {
       let initialGames: Game[] = [];
 
@@ -195,10 +214,10 @@ export default function HomePage() {
         setIsBoardLoading(false);
 
         const [predictionBody, socialProofBody, siteCopyBody, promoBannerBody] = await Promise.all([
-          predictionResponse?.ok ? predictionResponse.json().catch(() => null) : Promise.resolve(null),
-          socialProofResponse?.ok ? socialProofResponse.json().catch(() => null) : Promise.resolve(null),
-          siteCopyResponse?.ok ? siteCopyResponse.json().catch(() => null) : Promise.resolve(null),
-          promoBannerResponse?.ok ? promoBannerResponse.json().catch(() => null) : Promise.resolve(null),
+          predictionResponse?.ok ? jsonWithTimeout(predictionResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null) : Promise.resolve(null),
+          socialProofResponse?.ok ? jsonWithTimeout(socialProofResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null) : Promise.resolve(null),
+          siteCopyResponse?.ok ? jsonWithTimeout(siteCopyResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null) : Promise.resolve(null),
+          promoBannerResponse?.ok ? jsonWithTimeout(promoBannerResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null) : Promise.resolve(null),
         ]);
 
         if (predictionBody) {
@@ -228,7 +247,7 @@ export default function HomePage() {
         if (!bootstrapResponse?.ok) {
           await fallbackInit();
         } else {
-          const bootstrap = await bootstrapResponse.json().catch(() => null);
+          const bootstrap = await jsonWithTimeout(bootstrapResponse, BOOTSTRAP_TIMEOUT_MS).catch(() => null);
           if (!bootstrap) {
             await fallbackInit();
           } else {
@@ -305,6 +324,11 @@ export default function HomePage() {
       setIsBoardLoading(false);
       setIsPredictionLoading(false);
     });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(safetyTimeoutId);
+    };
   }, [fetchGames, unlockDailyPrediction]);
 
   useEffect(() => {
