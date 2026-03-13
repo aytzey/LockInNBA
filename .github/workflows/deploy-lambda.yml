@@ -1,0 +1,65 @@
+name: Deploy Lambda
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      LAMBDA_FUNCTION_NAME: lockin-nba-web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate deployment variables
+        run: |
+          if [ -z "${AWS_REGION}" ] || [ -z "${ECR_REPOSITORY}" ] || [ -z "${LAMBDA_FUNCTION_NAME}" ]; then
+            echo "Missing Lambda deployment variables." >&2
+            exit 1
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: login-ecr
+
+      - name: Build and push image
+        id: image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          IMAGE_URI="${REGISTRY}/${ECR_REPOSITORY}:main"
+          docker build --pull -t "${IMAGE_URI}" .
+          docker push "${IMAGE_URI}"
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+
+      - name: Update Lambda image
+        run: |
+          aws lambda update-function-code \
+            --function-name "${LAMBDA_FUNCTION_NAME}" \
+            --image-uri "${{ steps.image.outputs.image_uri }}"
+          aws lambda wait function-updated-v2 \
+            --function-name "${LAMBDA_FUNCTION_NAME}"
+          LAST_UPDATE_STATUS="$(aws lambda get-function-configuration \
+            --function-name "${LAMBDA_FUNCTION_NAME}" \
+            --query 'LastUpdateStatus' \
+            --output text)"
+          if [ "${LAST_UPDATE_STATUS}" != "Successful" ]; then
+            echo "Lambda update failed with status ${LAST_UPDATE_STATUS}" >&2
+            aws lambda get-function-configuration \
+              --function-name "${LAMBDA_FUNCTION_NAME}" \
+              --query '{LastUpdateStatus:LastUpdateStatus,LastUpdateStatusReason:LastUpdateStatusReason}' \
+              --output table
+            exit 1
+          fi

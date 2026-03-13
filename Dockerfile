@@ -10,11 +10,15 @@ COPY . .
 RUN npm run build
 
 FROM node:22-alpine AS runner
-WORKDIR /app
+WORKDIR /var/task
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
+ENV AWS_LWA_PORT=3000
+ENV AWS_LWA_READINESS_CHECK_PORT=3000
+ENV AWS_LWA_READINESS_CHECK_PATH=/
 
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/lambda-adapter
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static

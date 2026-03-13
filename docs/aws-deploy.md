@@ -10,41 +10,41 @@ LOCKIN NBA uygulamasini AWS uzerinde minimum surekli maliyetle calistirmak:
 - `main` -> production
 - `dev` -> kod branch'i olarak kalir, AWS uzerinde surekli staging environment tutulmaz
 
-Her `main` push'unda GitHub Actions Docker image'i ECR'ye gonderir, `Dockerrun.aws.json` bundle'i uretir ve production Elastic Beanstalk environment'ina yeni version deploy eder.
-Version label formati `branch-sha-run_id-attempt` oldugu icin workflow rerun veya manuel dispatch durumlarinda da ayni commit yeniden deploy edilebilir.
-Workflow deploy sonunda aktif Elastic Beanstalk `VersionLabel` degerini kontrol eder; AWS deploy'u kabul etse bile eski versiyonda kalirsa run fail olur.
+Her `main` push'unda GitHub Actions Docker image'i ECR'ye gonderir ve production Lambda function'inin image'ini gunceller.
+Lambda Web Adapter ayni Next.js standalone build'ini HTTP uygulamasi gibi Lambda icinde calistirir.
 
 # Mimari
 
 - AWS ECR repository: container image kaynagi
-- AWS Elastic Beanstalk application: `lockin-nba`
-- AWS Elastic Beanstalk production environment: `main` branch hedefi
+- AWS Lambda function: `lockin-nba-web`
+- AWS Lambda Function URL: CloudFront origin'i
 - AWS CloudFront distribution: `lockinpicks.com` ve `www.lockinpicks.com` icin HTTPS edge katmani
 - AWS Route53 hosted zone: `lockinpicks.com`
-- GitHub Actions workflow: [deploy-eb.yml](/home/aytzey/Desktop/lockin_nba/.github/workflows/deploy-eb.yml)
+- GitHub Actions workflow: [deploy-lambda.yml](/home/aytzey/Desktop/lockin_nba/.github/workflows/deploy-lambda.yml)
 
 # Maliyet Kurali
 
 Bu proje AWS tarafinda su maliyet tabanini hedefler:
 
-- sadece 1 adet surekli calisan production EC2 instance
+- surekli acik EC2 instance yok
 - staging veya preview icin surekli acik ikinci environment yok
 - ECR icinde eski untagged image'lar birikmez
-- deploy bucket icinde eski bundle ve release artefact'lari otomatik silinir
+- tek surekli altyapi CloudFront + Route53 + istek bazli Lambda olarak kalir
 
 Su anki sabit veya yari-sabit AWS kalemleri bunlardir:
 
-- production Elastic Beanstalk compute
 - CloudFront dagitimi
 - Route53 hosted zone
+- ECR storage
+- Lambda request/compute kullanimi
 
-CloudFront burada gereksiz luks degil; tek-instance Elastic Beanstalk uzerinde `lockinpicks.com` icin HTTPS bitirmek icin en dusuk-riskli katmandir. Route53 ise nameserver kesimi AWS'ye alindigi icin aktif tutulur.
+CloudFront burada gereksiz luks degil; `lockinpicks.com` HTTPS bitisini, cache katmanini ve Lambda origin'ine stabil edge erisimini saglar. Route53 ise nameserver kesimi AWS'ye alindigi icin aktif tutulur.
 
 # Aktif URL'ler
 
 - Production: `https://lockinpicks.com`
 - Production alternate: `https://www.lockinpicks.com`
-- Elastic Beanstalk origin: `http://lockin-main.us-east-1.elasticbeanstalk.com`
+- CloudFront origin: Lambda Function URL
 
 # Registrar Kesimi
 
@@ -79,22 +79,18 @@ Variables:
 
 - `AWS_REGION`
 - `ECR_REPOSITORY`
-- `EB_APPLICATION_NAME`
-- `EB_ENVIRONMENT_MAIN`
-- `EB_S3_BUCKET`
+- `LAMBDA_FUNCTION_NAME` workflow icinde sabit `lockin-nba-web` olarak kullanilir
 
 # Artefact Retention
 
 AWS tarafinda deploy artefact birikimini sinirlamak icin:
 
 - ECR: eski untagged image'lar lifecycle policy ile temizlenir
-- Elastic Beanstalk: her `main` deploy'undan sonra eski application version'lar ve source bundle'lari son 2 rollback noktasi disinda silinir
-- S3: `bundles/` ve `releases/` altindaki eski zip'ler 7 gunde silinir
-- S3: `deployments/dev/` altindaki eski zip'ler 3 gunde silinir
+- Lambda deploy zinciri S3 source bundle kullanmaz
 
 # Runtime Env
 
-Her Elastic Beanstalk environment'inda en az su env'ler tanimli olmali:
+Lambda function env icinde en az su degiskenler tanimli olmali:
 
 - `DATABASE_URL`
 - `OPENROUTER_API_KEY`
@@ -110,7 +106,7 @@ Her Elastic Beanstalk environment'inda en az su env'ler tanimli olmali:
 - `LOCKIN_SYNC_SECRET`
 - `LOCKIN_AUTO_PREDICTION_REFRESH_SECONDS`
 
-Production environment su an:
+Production env su an:
 
 - `NEXT_PUBLIC_APP_URL=https://lockinpicks.com`
 - `OPENROUTER_SITE_URL=https://lockinpicks.com`
