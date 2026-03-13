@@ -4,6 +4,8 @@ import { getOptionalEnv } from "./env";
 const DEFAULT_SYSTEM_PROMPT =
   "Sen LOCKIN'ın NBA analiz asistanısın. Veri odaklı ve net konuş. Sadece istatistiksel avantajları göster, kesin sonuç vaadi verme, bahis tavsiyesi olarak yorumlanmaması için dikkatli ol.";
 const SCHEMA_VERSION = 2026031302;
+const SCHEMA_TIMEOUT_MS = 8_000;
+const STATEMENT_TIMEOUT_MS = 10_000;
 
 declare global {
   var __lockinDbPool: Pool | undefined;
@@ -25,13 +27,18 @@ function createPool(): Pool {
     connectionString.includes("supabase.co") ||
     connectionString.includes("supabase.com");
 
-  return new Pool({
+  const pool = new Pool({
     connectionString,
-    max: 3,
+    max: 5,
     connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 30_000,
     ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
   });
+  // Set a per-statement timeout so no single query can hang forever.
+  pool.on("connect", (client) => {
+    client.query(`SET statement_timeout = ${STATEMENT_TIMEOUT_MS}`).catch(() => undefined);
+  });
+  return pool;
 }
 
 function getPool(): Pool {
@@ -344,7 +351,16 @@ async function ensureSchema(): Promise<void> {
     });
   }
 
-  await globalThis.__lockinDbSchemaPromise;
+  // Don't let schema bootstrap block requests forever.  On cold Lambda the
+  // tables very likely already exist; if they truly don't, the query itself
+  // will fail with a clear error rather than the whole page hanging.
+  const timeout = new Promise<void>((resolve) =>
+    setTimeout(() => {
+      console.warn("[LOCKIN] ensureSchema exceeded 8 s, proceeding without waiting");
+      resolve();
+    }, SCHEMA_TIMEOUT_MS),
+  );
+  await Promise.race([globalThis.__lockinDbSchemaPromise, timeout]);
 }
 
 export async function query<T extends QueryResultRow = QueryResultRow>(
