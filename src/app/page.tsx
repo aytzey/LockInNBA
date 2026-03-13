@@ -144,54 +144,62 @@ export default function HomePage() {
 
   useEffect(() => {
     async function init() {
-      const fetchPrediction = async () => {
-        try {
-          const response = await fetch("/api/predictions/today");
-          if (!response.ok) {
-            return;
-          }
+      let initialGames: Game[] = [];
 
-          const body = await response.json();
-          if (body) {
-            setTodayPrediction(body);
-          }
-        } finally {
-          setIsPredictionLoading(false);
+      const fallbackInit = async () => {
+        const [gamesBody, predictionResponse, socialProofResponse, siteCopyResponse] = await Promise.all([
+          fetchGames(),
+          fetch("/api/predictions/today").catch(() => null),
+          fetch("/api/social-proof").catch(() => null),
+          fetch("/api/site-copy").catch(() => null),
+        ]);
+
+        initialGames = (gamesBody?.games as Game[] | undefined) || [];
+        setIsBoardLoading(false);
+
+        const [predictionBody, socialProofBody, siteCopyBody] = await Promise.all([
+          predictionResponse?.ok ? predictionResponse.json().catch(() => null) : Promise.resolve(null),
+          socialProofResponse?.ok ? socialProofResponse.json().catch(() => null) : Promise.resolve(null),
+          siteCopyResponse?.ok ? siteCopyResponse.json().catch(() => null) : Promise.resolve(null),
+        ]);
+
+        if (predictionBody) {
+          setTodayPrediction(predictionBody);
         }
-      };
-
-      const fetchSocialProof = async () => {
-        const response = await fetch("/api/social-proof").catch(() => null);
-        if (!response?.ok) {
-          return;
-        }
-
-        const body = await response.json().catch(() => null);
-        setSocialProofBase(body?.text || DEFAULT_SOCIAL_PROOF);
-      };
-
-      const fetchSiteCopy = async () => {
-        const response = await fetch("/api/site-copy").catch(() => null);
-        if (!response?.ok) {
-          return;
-        }
-
-        const body = await response.json().catch(() => null);
+        setSocialProofBase(socialProofBody?.text || DEFAULT_SOCIAL_PROOF);
         setSiteCopy({
-          dailyCtaText: body?.dailyCtaText || DEFAULT_SITE_COPY.dailyCtaText,
-          noEdgeMessage: body?.noEdgeMessage || DEFAULT_SITE_COPY.noEdgeMessage,
-          headerRightText: body?.headerRightText || DEFAULT_SITE_COPY.headerRightText,
-          footerDisclaimer: body?.footerDisclaimer || DEFAULT_SITE_COPY.footerDisclaimer,
+          dailyCtaText: siteCopyBody?.dailyCtaText || DEFAULT_SITE_COPY.dailyCtaText,
+          noEdgeMessage: siteCopyBody?.noEdgeMessage || DEFAULT_SITE_COPY.noEdgeMessage,
+          headerRightText: siteCopyBody?.headerRightText || DEFAULT_SITE_COPY.headerRightText,
+          footerDisclaimer: siteCopyBody?.footerDisclaimer || DEFAULT_SITE_COPY.footerDisclaimer,
         });
+        setIsPredictionLoading(false);
       };
-
-      const predictionPromise = fetchPrediction();
-      const socialProofPromise = fetchSocialProof();
-      const siteCopyPromise = fetchSiteCopy();
 
       try {
-        const gamesBody = await fetchGames();
-        setIsBoardLoading(false);
+        const bootstrapResponse = await fetch("/api/bootstrap", { cache: "no-store" }).catch(() => null);
+        if (!bootstrapResponse?.ok) {
+          await fallbackInit();
+        } else {
+          const bootstrap = await bootstrapResponse.json().catch(() => null);
+          if (!bootstrap) {
+            await fallbackInit();
+          } else {
+            initialGames = (bootstrap.games as Game[] | undefined) || [];
+            setGames(initialGames);
+            setLastUpdatedAt(bootstrap.updatedAt || new Date().toISOString());
+            setTodayPrediction(bootstrap.prediction || null);
+            setSocialProofBase(bootstrap.socialProof?.text || DEFAULT_SOCIAL_PROOF);
+            setSiteCopy({
+              dailyCtaText: bootstrap.siteCopy?.dailyCtaText || DEFAULT_SITE_COPY.dailyCtaText,
+              noEdgeMessage: bootstrap.siteCopy?.noEdgeMessage || DEFAULT_SITE_COPY.noEdgeMessage,
+              headerRightText: bootstrap.siteCopy?.headerRightText || DEFAULT_SITE_COPY.headerRightText,
+              footerDisclaimer: bootstrap.siteCopy?.footerDisclaimer || DEFAULT_SITE_COPY.footerDisclaimer,
+            });
+            setIsPredictionLoading(false);
+            setIsBoardLoading(false);
+          }
+        }
 
         const params = new URLSearchParams(window.location.search);
         const checkoutSessionId = params.get("checkout_session");
@@ -210,7 +218,7 @@ export default function HomePage() {
                 if (result.chatSessionId && result.gameId) {
                   window.localStorage.setItem(`${CHAT_TOKEN_PREFIX}${result.chatSessionId}`, result.accessToken);
                   window.localStorage.setItem(`${CHAT_SESSION_RESTORE_PREFIX}${result.gameId}`, result.chatSessionId);
-                  const restoredGame = ((gamesBody?.games as Game[] | undefined) || []).find(
+                  const restoredGame = initialGames.find(
                     (game) => game.id === result.gameId,
                   );
                   if (restoredGame) {
@@ -233,9 +241,8 @@ export default function HomePage() {
         }
       } finally {
         setIsBoardLoading(false);
+        setIsPredictionLoading(false);
       }
-
-      await Promise.allSettled([predictionPromise, socialProofPromise, siteCopyPromise]);
     }
 
     void init().catch(() => {

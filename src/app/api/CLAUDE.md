@@ -30,6 +30,7 @@ Double-check auth before changing these.
 ## Public Data Rules
 
 - `games/today` is intentionally dynamic and no-store
+- `bootstrap` exists to collapse homepage cold-start data into one public request
 - `predictions/today` returns preview metadata, not full paid markdown
 - `social-proof` returns only active public banner text
 - `site-copy` returns public CTA, no-edge, header, and footer copy for the homepage

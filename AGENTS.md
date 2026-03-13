@@ -191,6 +191,7 @@ Database connection guidance:
 
 Public read:
 
+- `GET /api/bootstrap`
 - `GET /api/games/today`
 - `GET /api/predictions/today`
 - `GET /api/social-proof`
