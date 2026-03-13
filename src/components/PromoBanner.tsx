@@ -37,8 +37,8 @@ export default function PromoBanner({ promoBanner }: PromoBannerProps) {
   const [now, setNow] = useState(() => Date.now());
 
   const dismissKey = useMemo(
-    () => (promoBanner?.endDatetime ? `lockin_promo_dismissed:${promoBanner.endDatetime}` : ""),
-    [promoBanner?.endDatetime],
+    () => (promoBanner?.endDatetime ? `lockin_promo_dismissed:${promoBanner.endDatetime}:${promoBanner.updatedAt}` : ""),
+    [promoBanner?.endDatetime, promoBanner?.updatedAt],
   );
   const storedDismissed =
     dismissKey && typeof window !== "undefined"

@@ -35,6 +35,7 @@ type PromoBanner = {
   isActive: boolean;
   bannerText: string;
   endDatetime: string;
+  updatedAt: string;
 };
 
 type AdminGame = {
@@ -68,6 +69,7 @@ const DEFAULT_PROMO_BANNER: PromoBanner = {
   isActive: false,
   bannerText: "LAUNCH WEEK: 100% FREE ACCESS — Unlock every pick & AI chat free for 7 days.",
   endDatetime: "",
+  updatedAt: "",
 };
 
 function estDateInputValue(): string {
@@ -258,6 +260,7 @@ export default function AdminSecurePage() {
         isActive: promoBody.promoBanner?.isActive ?? DEFAULT_PROMO_BANNER.isActive,
         bannerText: promoBody.promoBanner?.bannerText || DEFAULT_PROMO_BANNER.bannerText,
         endDatetime: promoBody.promoBanner?.endDatetime || "",
+        updatedAt: promoBody.promoBanner?.updatedAt || "",
       });
     } catch {
       setPredictionMessage("Failed to load admin data.");
@@ -528,6 +531,7 @@ export default function AdminSecurePage() {
         isActive: data.promoBanner?.isActive ?? false,
         bannerText: data.promoBanner?.bannerText || DEFAULT_PROMO_BANNER.bannerText,
         endDatetime: data.promoBanner?.endDatetime || "",
+        updatedAt: data.promoBanner?.updatedAt || "",
       });
       setPromoMessage("Promo banner updated.");
     } catch {

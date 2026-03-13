@@ -56,6 +56,10 @@ const DEFAULT_PROMO_BANNER: PromoBanner = {
   updatedAt: new Date().toISOString(),
 };
 
+function getDefaultPromoEndDatetime(): string {
+  return new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString();
+}
+
 type RowValue = string | number | boolean | Date | null | undefined;
 
 function toIsoString(value: RowValue): string {
@@ -544,10 +548,17 @@ export async function setPromoBanner(input: {
   endDatetime?: string;
 }): Promise<PromoBanner> {
   const current = await getPromoBanner();
+  const nextIsActive = input.isActive ?? current.isActive;
+  const requestedEndDatetime = input.endDatetime?.trim() || current.endDatetime || "";
+  const requestedEndsAt = requestedEndDatetime ? new Date(requestedEndDatetime).getTime() : Number.NaN;
+  const nextEndDatetime =
+    nextIsActive && (!requestedEndDatetime || Number.isNaN(requestedEndsAt) || requestedEndsAt <= Date.now())
+      ? getDefaultPromoEndDatetime()
+      : requestedEndDatetime;
   const next = {
-    isActive: input.isActive ?? current.isActive,
+    isActive: nextIsActive,
     bannerText: input.bannerText?.trim() || current.bannerText || DEFAULT_PROMO_BANNER.bannerText,
-    endDatetime: input.endDatetime?.trim() || current.endDatetime || "",
+    endDatetime: nextEndDatetime,
   };
 
   const result = await query(

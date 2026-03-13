@@ -51,6 +51,7 @@ export async function GET() {
             isActive: promoBanner.isActive,
             bannerText: promoBanner.bannerText,
             endDatetime: promoBanner.endDatetime,
+            updatedAt: promoBanner.updatedAt,
           }
         : null,
     },

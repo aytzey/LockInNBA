@@ -45,6 +45,7 @@ export type PromoBanner = {
   isActive: boolean;
   bannerText: string;
   endDatetime: string;
+  updatedAt: string;
 };
 
 export type ChatMessage = {
