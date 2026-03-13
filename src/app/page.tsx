@@ -80,7 +80,8 @@ export default function HomePage() {
   const shareCardRef = useRef<HTMLDivElement>(null);
   const gameSectionRef = useRef<HTMLDivElement>(null);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isBoardLoading, setIsBoardLoading] = useState(true);
+  const [isPredictionLoading, setIsPredictionLoading] = useState(true);
   const [todayPrediction, setTodayPrediction] = useState<TodayPrediction | null>(null);
   const [socialProofBase, setSocialProofBase] = useState(DEFAULT_SOCIAL_PROOF);
   const [siteCopy, setSiteCopy] = useState<SiteCopy>(DEFAULT_SITE_COPY);
@@ -143,29 +144,54 @@ export default function HomePage() {
 
   useEffect(() => {
     async function init() {
-      try {
-        const [predictionResponse, gamesBody, socialProofResponse, siteCopyResponse] = await Promise.all([
-          fetch("/api/predictions/today"),
-          fetchGames(),
-          fetch("/api/social-proof"),
-          fetch("/api/site-copy"),
-        ]);
-        const [predictionBody, socialProofBody, siteCopyBody] = await Promise.all([
-          predictionResponse.ok ? predictionResponse.json() : Promise.resolve(null),
-          socialProofResponse.ok ? socialProofResponse.json() : Promise.resolve(null),
-          siteCopyResponse.ok ? siteCopyResponse.json() : Promise.resolve(null),
-        ]);
+      const fetchPrediction = async () => {
+        try {
+          const response = await fetch("/api/predictions/today");
+          if (!response.ok) {
+            return;
+          }
 
-        if (predictionBody) {
-          setTodayPrediction(predictionBody);
+          const body = await response.json();
+          if (body) {
+            setTodayPrediction(body);
+          }
+        } finally {
+          setIsPredictionLoading(false);
         }
-        setSocialProofBase(socialProofBody?.text || DEFAULT_SOCIAL_PROOF);
+      };
+
+      const fetchSocialProof = async () => {
+        const response = await fetch("/api/social-proof").catch(() => null);
+        if (!response?.ok) {
+          return;
+        }
+
+        const body = await response.json().catch(() => null);
+        setSocialProofBase(body?.text || DEFAULT_SOCIAL_PROOF);
+      };
+
+      const fetchSiteCopy = async () => {
+        const response = await fetch("/api/site-copy").catch(() => null);
+        if (!response?.ok) {
+          return;
+        }
+
+        const body = await response.json().catch(() => null);
         setSiteCopy({
-          dailyCtaText: siteCopyBody?.dailyCtaText || DEFAULT_SITE_COPY.dailyCtaText,
-          noEdgeMessage: siteCopyBody?.noEdgeMessage || DEFAULT_SITE_COPY.noEdgeMessage,
-          headerRightText: siteCopyBody?.headerRightText || DEFAULT_SITE_COPY.headerRightText,
-          footerDisclaimer: siteCopyBody?.footerDisclaimer || DEFAULT_SITE_COPY.footerDisclaimer,
+          dailyCtaText: body?.dailyCtaText || DEFAULT_SITE_COPY.dailyCtaText,
+          noEdgeMessage: body?.noEdgeMessage || DEFAULT_SITE_COPY.noEdgeMessage,
+          headerRightText: body?.headerRightText || DEFAULT_SITE_COPY.headerRightText,
+          footerDisclaimer: body?.footerDisclaimer || DEFAULT_SITE_COPY.footerDisclaimer,
         });
+      };
+
+      const predictionPromise = fetchPrediction();
+      const socialProofPromise = fetchSocialProof();
+      const siteCopyPromise = fetchSiteCopy();
+
+      try {
+        const gamesBody = await fetchGames();
+        setIsBoardLoading(false);
 
         const params = new URLSearchParams(window.location.search);
         const checkoutSessionId = params.get("checkout_session");
@@ -206,15 +232,20 @@ export default function HomePage() {
           await unlockDailyPrediction(savedToken);
         }
       } finally {
-        setIsLoading(false);
+        setIsBoardLoading(false);
       }
+
+      await Promise.allSettled([predictionPromise, socialProofPromise, siteCopyPromise]);
     }
 
-    void init().catch(() => setIsLoading(false));
+    void init().catch(() => {
+      setIsBoardLoading(false);
+      setIsPredictionLoading(false);
+    });
   }, [fetchGames, unlockDailyPrediction]);
 
   useEffect(() => {
-    if (isLoading) {
+    if (isBoardLoading) {
       return;
     }
 
@@ -250,7 +281,7 @@ export default function HomePage() {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [fetchGames, games, isLoading]);
+  }, [fetchGames, games, isBoardLoading]);
 
   useEffect(() => {
     if (!selectedGame) {
@@ -356,7 +387,7 @@ export default function HomePage() {
         <motion.div variants={itemVariants}>
           <TonightsEdge
             prediction={todayPrediction}
-            isLoading={isLoading}
+            isLoading={isPredictionLoading && !dailyUnlocked}
             dailyUnlocked={dailyUnlocked}
             dailyMarkdown={dailyMarkdown}
             onUnlock={unlockDailyPrediction}
@@ -383,7 +414,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {isLoading ? (
+          {isBoardLoading ? (
             <GameListSkeleton />
           ) : games.length === 0 ? (
             <div className="empty-board-card">

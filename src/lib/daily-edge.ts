@@ -18,7 +18,7 @@ const AUTO_PREDICTION_REFRESH_MS = Math.max(
   Number.parseInt(getOptionalEnv("LOCKIN_AUTO_PREDICTION_REFRESH_SECONDS") || "1800", 10) || 1800,
 ) * 1000;
 const LIVE_GAMES_REFRESH_MS = 60 * 1000;
-const UPCOMING_GAMES_REFRESH_MS = 5 * 60 * 1000;
+const UPCOMING_GAMES_REFRESH_MS = 90 * 1000;
 const FINAL_GAMES_REFRESH_MS = 15 * 60 * 1000;
 const EMPTY_SLATE_REFRESH_MS = 30 * 60 * 1000;
 
@@ -169,18 +169,18 @@ export async function getPublicGames(date = getEstDateKey()): Promise<{
     };
   }
 
-  try {
-    const liveSnapshot = await fetchTodayGames(date, { bypassCache: true });
-    if (liveSnapshot.some((game) => game.status === "live")) {
+  if (cachedGames.some((game) => game.status === "live")) {
+    try {
+      const liveSnapshot = await fetchTodayGames(date, { bypassCache: true });
       return {
         games: mergeLatestGames(cachedGames, liveSnapshot),
         updatedAt: new Date().toISOString(),
         refreshed: true,
         source: "live",
       };
+    } catch {
+      // Fall back to cached/stale refresh path when the direct live pull fails.
     }
-  } catch {
-    // Fall back to cached/stale refresh path when the direct live pull fails.
   }
 
   if (!shouldRefreshGames(date, cachedGames, lastUpdatedAt, false)) {
