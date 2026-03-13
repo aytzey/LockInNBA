@@ -19,6 +19,15 @@ const LIVE_BOARD_POLL_MS = 20_000;
 const ACTIVE_SLATE_POLL_MS = 5 * 60_000;
 const QUIET_SLATE_POLL_MS = 15 * 60_000;
 const EMPTY_BOARD_POLL_MS = 60_000;
+const BOOTSTRAP_TIMEOUT_MS = 6_000;
+const GAMES_FETCH_TIMEOUT_MS = 8_000;
+const FALLBACK_FETCH_TIMEOUT_MS = 5_000;
+
+function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timeoutId));
+}
 const DEFAULT_SOCIAL_PROOF_MESSAGES = [
   "This Week: 5-0 (100%)",
   "+19.3u ROI",
@@ -119,7 +128,7 @@ export default function HomePage() {
 
   const fetchGames = useCallback(async () => {
     try {
-      const response = await fetch("/api/games/today", { cache: "no-store" });
+      const response = await fetchWithTimeout("/api/games/today", { cache: "no-store" }, GAMES_FETCH_TIMEOUT_MS);
       if (!response.ok) {
         return null;
       }
@@ -176,10 +185,10 @@ export default function HomePage() {
       const fallbackInit = async () => {
         const [gamesBody, predictionResponse, socialProofResponse, siteCopyResponse, promoBannerResponse] = await Promise.all([
           fetchGames(),
-          fetch("/api/predictions/today").catch(() => null),
-          fetch("/api/social-proof").catch(() => null),
-          fetch("/api/site-copy").catch(() => null),
-          fetch("/api/promo-banner").catch(() => null),
+          fetchWithTimeout("/api/predictions/today", {}, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null),
+          fetchWithTimeout("/api/social-proof", {}, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null),
+          fetchWithTimeout("/api/site-copy", {}, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null),
+          fetchWithTimeout("/api/promo-banner", {}, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null),
         ]);
 
         initialGames = (gamesBody?.games as Game[] | undefined) || [];
@@ -215,7 +224,7 @@ export default function HomePage() {
       };
 
       try {
-        const bootstrapResponse = await fetch("/api/bootstrap", { cache: "no-store" }).catch(() => null);
+        const bootstrapResponse = await fetchWithTimeout("/api/bootstrap", { cache: "no-store" }, BOOTSTRAP_TIMEOUT_MS).catch(() => null);
         if (!bootstrapResponse?.ok) {
           await fallbackInit();
         } else {

@@ -337,8 +337,10 @@ export async function getPublicPredictionPreview(date = getEstDateKey()): Promis
     return existing;
   }
 
-  const result = await refreshPredictionForDate(date);
-  return result.prediction;
+  // Return immediately with whatever we have; generate in the background so
+  // the bootstrap / prediction route never blocks on a slow LLM call.
+  void refreshPredictionForDate(date).catch(() => {});
+  return existing;
 }
 
 export async function refreshLiveData(dates: string[], forcePrediction = false): Promise<Array<{
