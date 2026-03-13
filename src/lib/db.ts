@@ -3,6 +3,7 @@ import { getOptionalEnv } from "./env";
 
 const DEFAULT_SYSTEM_PROMPT =
   "Sen LOCKIN'ın NBA analiz asistanısın. Veri odaklı ve net konuş. Sadece istatistiksel avantajları göster, kesin sonuç vaadi verme, bahis tavsiyesi olarak yorumlanmaması için dikkatli ol.";
+const SCHEMA_VERSION = 20260313;
 
 declare global {
   var __lockinDbPool: Pool | undefined;
@@ -41,6 +42,14 @@ function getPool(): Pool {
 
 async function runSchemaSetup(): Promise<void> {
   const pool = getPool();
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS lockin_schema_state (
+      id TEXT PRIMARY KEY,
+      version INTEGER NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS predictions (
@@ -217,6 +226,7 @@ async function runSchemaSetup(): Promise<void> {
   );
 
   const appTables = [
+    "lockin_schema_state",
     "predictions",
     "social_proof_banner",
     "site_copy",
@@ -240,11 +250,45 @@ async function runSchemaSetup(): Promise<void> {
   await pool.query(
     `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated`,
   );
+
+  await pool.query(
+    `INSERT INTO lockin_schema_state (id, version, updated_at)
+     VALUES ('default', $1, NOW())
+     ON CONFLICT (id) DO UPDATE
+       SET version = EXCLUDED.version,
+           updated_at = NOW()`,
+    [SCHEMA_VERSION],
+  );
+}
+
+async function getAppliedSchemaVersion(): Promise<number | null> {
+  const pool = getPool();
+
+  try {
+    const result = await pool.query<{ version: number }>(
+      `SELECT version FROM lockin_schema_state WHERE id = 'default' LIMIT 1`,
+    );
+    if (!result.rows[0]) {
+      return 0;
+    }
+
+    const version = Number(result.rows[0].version);
+    return Number.isFinite(version) ? version : 0;
+  } catch {
+    return null;
+  }
 }
 
 async function ensureSchema(): Promise<void> {
   if (!globalThis.__lockinDbSchemaPromise) {
-    globalThis.__lockinDbSchemaPromise = runSchemaSetup().catch((error) => {
+    globalThis.__lockinDbSchemaPromise = (async () => {
+      const appliedVersion = await getAppliedSchemaVersion();
+      if (appliedVersion !== null && appliedVersion >= SCHEMA_VERSION) {
+        return;
+      }
+
+      await runSchemaSetup();
+    })().catch((error) => {
       globalThis.__lockinDbSchemaPromise = undefined;
       throw error;
     });

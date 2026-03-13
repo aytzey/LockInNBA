@@ -1,10 +1,27 @@
-import { NextResponse } from "next/server";
-import { getPublicPredictionPreview } from "@/lib/daily-edge";
+import { after, NextResponse } from "next/server";
+import {
+  getOrCreateTodayPrediction,
+  predictionHasContent,
+  predictionNeedsRefresh,
+  refreshPredictionForDate,
+} from "@/lib/daily-edge";
+import { getTodayPrediction } from "@/lib/store";
 import { getEstDateKey } from "@/lib/time";
 
 export async function GET() {
   const date = getEstDateKey();
-  const prediction = await getPublicPredictionPreview(date);
+  const existing = await getTodayPrediction(date);
+  const prediction = predictionHasContent(existing) ? existing : await getOrCreateTodayPrediction(date);
+
+  if (predictionHasContent(existing) && predictionNeedsRefresh(existing, false)) {
+    after(async () => {
+      try {
+        await refreshPredictionForDate(date);
+      } catch {
+        // Keep serving the last good teaser if background refresh fails.
+      }
+    });
+  }
 
   return NextResponse.json({
     date,

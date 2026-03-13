@@ -38,16 +38,16 @@ function getGamesRefreshJobs() {
   return globalThis.__lockinGamesRefreshJobs;
 }
 
-function hasPredictionContent(prediction: DailyPrediction): boolean {
+export function predictionHasContent(prediction: DailyPrediction): boolean {
   return prediction.teaserText.trim().length > 0 && (prediction.markdownContent.trim().length > 0 || prediction.isNoEdgeDay);
 }
 
-function shouldRefreshPrediction(prediction: DailyPrediction, forcePrediction: boolean): boolean {
+export function predictionNeedsRefresh(prediction: DailyPrediction, forcePrediction: boolean): boolean {
   if (forcePrediction) {
     return prediction.source !== "admin";
   }
 
-  if (!hasPredictionContent(prediction)) {
+  if (!predictionHasContent(prediction)) {
     return true;
   }
 
@@ -61,6 +61,21 @@ function shouldRefreshPrediction(prediction: DailyPrediction, forcePrediction: b
   }
 
   return (Date.now() - updatedAt) >= AUTO_PREDICTION_REFRESH_MS;
+}
+
+async function loadGamesState(date: string): Promise<{
+  cachedGames: Game[];
+  lastUpdatedAt: string | null;
+}> {
+  const [cachedGames, refreshState] = await Promise.all([
+    getGames(date),
+    getGamesRefreshState(date),
+  ]);
+
+  return {
+    cachedGames,
+    lastUpdatedAt: refreshState?.updatedAt ?? null,
+  };
 }
 
 function getGamesRefreshWindowMs(date: string, games: Game[]): number {
@@ -106,9 +121,7 @@ export async function getFreshGames(date = getEstDateKey(), forceRefresh = false
   updatedAt: string | null;
   refreshed: boolean;
 }> {
-  const cachedGames = await getGames(date);
-  const refreshState = await getGamesRefreshState(date);
-  const lastUpdatedAt = refreshState?.updatedAt ?? null;
+  const { cachedGames, lastUpdatedAt } = await loadGamesState(date);
 
   if (!shouldRefreshGames(date, cachedGames, lastUpdatedAt, forceRefresh)) {
     return {
@@ -157,9 +170,7 @@ export async function getPublicGames(date = getEstDateKey()): Promise<{
   source: "cache" | "live";
 }> {
   const today = getEstDateKey();
-  const cachedGames = await getGames(date);
-  const refreshState = await getGamesRefreshState(date);
-  const lastUpdatedAt = refreshState?.updatedAt ?? null;
+  const { cachedGames, lastUpdatedAt } = await loadGamesState(date);
 
   if (date !== today) {
     const result = await getFreshGames(date);
@@ -212,7 +223,7 @@ export async function refreshPredictionForDate(date = getEstDateKey(), forcePred
   const { games } = await getFreshGames(date);
   const existing = await getTodayPrediction(date);
 
-  if (!shouldRefreshPrediction(existing, forcePrediction)) {
+  if (!predictionNeedsRefresh(existing, forcePrediction)) {
     return {
       prediction: existing,
       refreshed: false,
@@ -248,11 +259,7 @@ export async function getOrCreateTodayPrediction(date = getEstDateKey()): Promis
 export async function getPublicPredictionPreview(date = getEstDateKey()): Promise<DailyPrediction> {
   const existing = await getTodayPrediction(date);
 
-  if (hasPredictionContent(existing)) {
-    if (shouldRefreshPrediction(existing, false)) {
-      void refreshPredictionForDate(date).catch(() => undefined);
-    }
-
+  if (predictionHasContent(existing)) {
     return existing;
   }
 
