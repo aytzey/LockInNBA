@@ -51,6 +51,10 @@ const gameCardVariants = {
   }),
 };
 
+const LIVE_BOARD_POLL_MS = 20_000;
+const ACTIVE_SLATE_POLL_MS = 90_000;
+const QUIET_SLATE_POLL_MS = 5 * 60_000;
+
 export default function HomePage() {
   const shareCardRef = useRef<HTMLDivElement>(null);
   const gameSectionRef = useRef<HTMLDivElement>(null);
@@ -71,6 +75,24 @@ export default function HomePage() {
   const [shareMode, setShareMode] = useState<"daily" | "chat">("daily");
 
   const preview = splitTeaser(todayPrediction?.teaserText || "");
+
+  const fetchGames = useCallback(async () => {
+    try {
+      const response = await fetch("/api/games/today", { cache: "no-store" });
+      if (!response.ok) {
+        return null;
+      }
+
+      const body = await response.json();
+      if (body?.games) {
+        setGames(body.games);
+      }
+      setLastUpdatedAt(body?.updatedAt || new Date().toISOString());
+      return body;
+    } catch {
+      return null;
+    }
+  }, []);
 
   const unlockDailyPrediction = useCallback(async (token: string) => {
     try {
@@ -96,20 +118,17 @@ export default function HomePage() {
   useEffect(() => {
     async function init() {
       try {
-        const [pRes, gRes, bRes] = await Promise.all([
+        const [pRes, , bRes] = await Promise.all([
           fetch("/api/predictions/today"),
-          fetch("/api/games/today"),
+          fetchGames(),
           fetch("/api/social-proof"),
         ]);
-        const [pBody, gBody, bBody] = await Promise.all([
+        const [pBody, bBody] = await Promise.all([
           pRes.ok ? pRes.json() : Promise.resolve(null),
-          gRes.ok ? gRes.json() : Promise.resolve(null),
           bRes.ok ? bRes.json() : Promise.resolve(null),
         ]);
         if (pBody) setTodayPrediction(pBody);
-        if (gBody?.games) setGames(gBody.games);
         setSocialProof(bBody?.text || "");
-        setLastUpdatedAt(gBody?.updatedAt || new Date().toISOString());
 
         const savedToken = window.localStorage.getItem(DAILY_TOKEN_KEY);
         if (savedToken) {
@@ -121,7 +140,67 @@ export default function HomePage() {
     }
 
     init().catch(() => setIsLoading(false));
-  }, [unlockDailyPrediction]);
+  }, [fetchGames, unlockDailyPrediction]);
+
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+
+    const hasLiveGames = games.some((game) => game.status === "live");
+    const hasActiveSlate = hasLiveGames || games.some((game) => game.status === "upcoming");
+    const intervalMs = hasLiveGames
+      ? LIVE_BOARD_POLL_MS
+      : hasActiveSlate
+        ? ACTIVE_SLATE_POLL_MS
+        : QUIET_SLATE_POLL_MS;
+
+    const refreshGames = async () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      await fetchGames();
+    };
+
+    const intervalId = window.setInterval(() => {
+      void refreshGames();
+    }, intervalMs);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void fetchGames();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchGames, games, isLoading]);
+
+  useEffect(() => {
+    if (!selectedGame) {
+      return;
+    }
+
+    const nextSelectedGame = games.find((game) => game.id === selectedGame.id);
+    if (!nextSelectedGame) {
+      return;
+    }
+
+    const scoreChanged =
+      nextSelectedGame.awayScore !== selectedGame.awayScore ||
+      nextSelectedGame.homeScore !== selectedGame.homeScore ||
+      nextSelectedGame.status !== selectedGame.status ||
+      nextSelectedGame.statusDetail !== selectedGame.statusDetail;
+
+    if (scoreChanged) {
+      setSelectedGame(nextSelectedGame);
+    }
+  }, [games, selectedGame]);
 
   function handleOpenChat(game: Game) {
     setSelectedGame(game);
@@ -268,6 +347,11 @@ export default function HomePage() {
                       </span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--muted)]">
+                      {(game.status === "live" || game.status === "final") && game.awayScore !== null && game.homeScore !== null && (
+                        <span className="chip">
+                          {game.awayTeam} {game.awayScore} - {game.homeScore} {game.homeTeam}
+                        </span>
+                      )}
                       <span className="chip">{game.awayTeam} {game.awayMoneyline > 0 ? `+${game.awayMoneyline}` : game.awayMoneyline || "OFF"}</span>
                       <span className="chip">{game.homeTeam} {game.homeMoneyline > 0 ? `+${game.homeMoneyline}` : game.homeMoneyline || "OFF"}</span>
                       <span className="chip">{game.spread}</span>

@@ -1,6 +1,6 @@
 import { getOptionalEnv } from "./env";
 import { generateDailyPrediction } from "./llm";
-import { fetchTodayGames } from "./nba";
+import { fetchTodayGames, mergeLatestGames } from "./nba";
 import {
   getActiveSystemPrompt,
   getGames,
@@ -148,6 +148,55 @@ export async function getFreshGames(date = getEstDateKey(), forceRefresh = false
 
   jobs.set(cacheKey, job);
   return job;
+}
+
+export async function getPublicGames(date = getEstDateKey()): Promise<{
+  games: Game[];
+  updatedAt: string | null;
+  refreshed: boolean;
+  source: "cache" | "live";
+}> {
+  const today = getEstDateKey();
+  const cachedGames = await getGames(date);
+  const refreshState = await getGamesRefreshState(date);
+  const lastUpdatedAt = refreshState?.updatedAt ?? null;
+
+  if (date !== today) {
+    const result = await getFreshGames(date);
+    return {
+      ...result,
+      source: "cache",
+    };
+  }
+
+  try {
+    const liveSnapshot = await fetchTodayGames(date, { bypassCache: true });
+    if (liveSnapshot.some((game) => game.status === "live")) {
+      return {
+        games: mergeLatestGames(cachedGames, liveSnapshot),
+        updatedAt: new Date().toISOString(),
+        refreshed: true,
+        source: "live",
+      };
+    }
+  } catch {
+    // Fall back to cached/stale refresh path when the direct live pull fails.
+  }
+
+  if (!shouldRefreshGames(date, cachedGames, lastUpdatedAt, false)) {
+    return {
+      games: cachedGames,
+      updatedAt: lastUpdatedAt,
+      refreshed: false,
+      source: "cache",
+    };
+  }
+
+  const result = await getFreshGames(date);
+  return {
+    ...result,
+    source: "cache",
+  };
 }
 
 export async function syncTodayGames(date = getEstDateKey(), forceRefresh = false): Promise<Game[]> {

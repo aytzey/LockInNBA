@@ -122,6 +122,10 @@ function sortGames(a: Game, b: Game): number {
   return new Date(a.gameTimeEST).getTime() - new Date(b.gameTimeEST).getTime();
 }
 
+function preferValue<T>(primary: T, fallback: T, isMissing: (value: T) => boolean): T {
+  return isMissing(primary) ? fallback : primary;
+}
+
 function fallbackTotal(odds?: EspnOdds): string {
   const over = odds?.total?.over?.close?.line;
   const under = odds?.total?.under?.close?.line;
@@ -213,16 +217,59 @@ export function buildDailySlateContext(games: Game[]): string {
     .join("\n\n");
 }
 
-export async function fetchTodayGames(date = getEstDateKey()): Promise<Game[]> {
+export function mergeLatestGames(cachedGames: Game[], latestGames: Game[]): Game[] {
+  if (cachedGames.length === 0) {
+    return [...latestGames].sort(sortGames);
+  }
+
+  const cachedById = new Map(cachedGames.map((game) => [game.id, game]));
+  const merged = latestGames.map((game) => {
+    const cached = cachedById.get(game.id);
+    if (!cached) {
+      return game;
+    }
+
+    return {
+      ...cached,
+      ...game,
+      awayMoneyline: preferValue(game.awayMoneyline, cached.awayMoneyline, (value) => value === 0),
+      homeMoneyline: preferValue(game.homeMoneyline, cached.homeMoneyline, (value) => value === 0),
+      spread: preferValue(game.spread, cached.spread, (value) => value === "Line pending"),
+      total: preferValue(game.total, cached.total, (value) => value === "Market pending"),
+      broadcast: preferValue(game.broadcast, cached.broadcast, (value) => value === "Broadcast pending"),
+      venue: preferValue(game.venue, cached.venue, (value) => value === "Arena pending"),
+    };
+  });
+
+  for (const cached of cachedGames) {
+    if (!merged.some((game) => game.id === cached.id)) {
+      merged.push(cached);
+    }
+  }
+
+  return merged.sort(sortGames);
+}
+
+export async function fetchTodayGames(
+  date = getEstDateKey(),
+  options?: { bypassCache?: boolean },
+): Promise<Game[]> {
   const espnDate = date.replaceAll("-", "");
   const response = await fetch(
     `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${espnDate}&limit=20`,
-    {
-      next: { revalidate: 60 },
-      headers: {
-        Accept: "application/json",
+    options?.bypassCache
+      ? {
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+        },
+      }
+      : {
+        next: { revalidate: 60 },
+        headers: {
+          Accept: "application/json",
+        },
       },
-    },
   );
 
   if (!response.ok) {

@@ -23,6 +23,7 @@ function statusBadge(status: Game["status"]): { className: string; label: string
 export default function GameCard({ game, onOpenChat }: GameCardProps) {
   const badge = statusBadge(game.status);
   const isLive = game.status === "live";
+  const hasScore = game.awayScore !== null && game.homeScore !== null;
   const cardRef = useRef<HTMLButtonElement>(null);
   const [visible, setVisible] = useState(false);
 
@@ -122,17 +123,27 @@ export default function GameCard({ game, onOpenChat }: GameCardProps) {
         </div>
       </div>
 
-      {game.status === "final" && game.awayScore !== null && game.homeScore !== null && (
-        <div className="mt-3 flex items-center justify-center gap-4 rounded-lg bg-white/[0.02] py-2 text-xs">
-          <span className="mono font-medium text-white">
-            {game.awayTeam}{" "}
-            {visible ? <CountUp end={game.awayScore!} duration={1.5} useEasing /> : game.awayScore}
-          </span>
-          <span className="text-[#8b92a5]">-</span>
-          <span className="mono font-medium text-white">
-            {game.homeTeam}{" "}
-            {visible ? <CountUp end={game.homeScore!} duration={1.5} useEasing /> : game.homeScore}
-          </span>
+      {hasScore && (
+        <div className={`mt-3 rounded-[1rem] border px-3 py-3 ${isLive
+          ? "border-[color:var(--signal-red-line)] bg-[color:var(--signal-red-soft)]"
+          : "border-[color:var(--line)] bg-white/[0.02]"
+        }`}>
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span className={`mono font-medium ${isLive ? "text-[color:var(--signal-red)]" : "text-[var(--muted)]"}`}>
+              {isLive ? game.statusDetail : "Final score"}
+            </span>
+            {isLive && <span className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--signal-red)]">Live board</span>}
+          </div>
+          <div className="mt-2 grid grid-cols-[1fr_auto] gap-2 text-sm text-white">
+            <span className="mono text-[var(--muted)]">{game.awayTeam}</span>
+            <span className="mono text-right text-lg font-semibold">
+              {isLive ? game.awayScore : visible ? <CountUp end={game.awayScore!} duration={1.2} useEasing /> : game.awayScore}
+            </span>
+            <span className="mono text-[var(--muted)]">{game.homeTeam}</span>
+            <span className="mono text-right text-lg font-semibold">
+              {isLive ? game.homeScore : visible ? <CountUp end={game.homeScore!} duration={1.2} useEasing /> : game.homeScore}
+            </span>
+          </div>
         </div>
       )}
 
