@@ -74,3 +74,4 @@ App tables also enable RLS during bootstrap and revoke `anon` / `authenticated` 
 - Production deploys run from `main` through [`deploy-lambda.yml`](/home/aytzey/Desktop/lockin_nba/.github/workflows/deploy-lambda.yml).
 - The app ships as a Next.js standalone container image.
 - AWS Lambda Web Adapter runs that image behind CloudFront, so there is no always-on EC2 instance.
+- Production origin requests are guarded with a shared origin header so the raw Lambda Function URL is not meant to be used directly.

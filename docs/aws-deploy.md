@@ -22,6 +22,9 @@ Lambda Web Adapter ayni Next.js standalone build'ini HTTP uygulamasi gibi Lambda
 - AWS Route53 hosted zone: `lockinpicks.com`
 - GitHub Actions workflow: [deploy-lambda.yml](/home/aytzey/Desktop/lockin_nba/.github/workflows/deploy-lambda.yml)
 
+Lambda Function URL public auth modunda kalsa bile origin seviyesinde CloudFront secret header korumasi kullanilir.
+Uygulama proxy katmani `x-lockin-origin-verify` header'ini bekler; bu header sadece CloudFront origin config'inde tanimlidir.
+
 # Maliyet Kurali
 
 Bu proje AWS tarafinda su maliyet tabanini hedefler:
@@ -105,6 +108,7 @@ Lambda function env icinde en az su degiskenler tanimli olmali:
 - `LOCKIN_TOKEN_SECRET`
 - `LOCKIN_SYNC_SECRET`
 - `LOCKIN_AUTO_PREDICTION_REFRESH_SECONDS`
+- `ORIGIN_VERIFY_SECRET`
 
 Production env su an:
 
