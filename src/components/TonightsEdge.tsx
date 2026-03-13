@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import type { TodayPrediction } from "./types";
 import { formatEstDate, validateEmail, DAILY_TOKEN_KEY } from "./utils";
-import { createCheckout, finalizeCheckout } from "./api";
+import { createCheckout, waitForCheckout, mockComplete } from "./api";
 import MarkdownContent from "./MarkdownContent";
 
 interface TonightsEdgeProps {
@@ -52,7 +52,23 @@ export default function TonightsEdge({
     setError("");
     try {
       const checkout = await createCheckout("daily_pick", dailyEmail);
-      const token = await finalizeCheckout(checkout.sessionId);
+
+      let token: string;
+      if (checkout.checkoutUrl === "__mock__") {
+        // Local dev: use mock completion
+        token = await mockComplete(checkout.sessionId);
+      } else {
+        // Production: open Lemon Squeezy checkout
+        const popup = window.open(checkout.checkoutUrl, "lemonsqueezy", "width=460,height=720,left=200,top=100");
+        if (!popup) {
+          // Popup blocked — redirect instead
+          window.location.href = checkout.checkoutUrl;
+          return;
+        }
+        token = await waitForCheckout(checkout.sessionId);
+        try { popup.close(); } catch {}
+      }
+
       window.localStorage.setItem(DAILY_TOKEN_KEY, token);
       await onUnlock(token);
       toast.success("Daily edge unlocked!");

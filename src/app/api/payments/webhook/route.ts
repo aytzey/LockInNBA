@@ -1,44 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
 import { completeCheckout, getCheckoutSession } from "@/lib/store";
-import { issueAccessToken, generateMagicLinkToken } from "@/lib/token";
-import { getEstDateKey } from "@/lib/time";
+import { verifyWebhookSignature } from "@/lib/lemonsqueezy";
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => null);
-  const sessionId = body?.sessionId as string | undefined;
-  const stripePaymentId = body?.stripePaymentId || generateMagicLinkToken(8);
+  const rawBody = await request.text();
+  const signature = request.headers.get("x-signature") || "";
 
-  if (!sessionId) {
-    return NextResponse.json({ message: "Missing sessionId" }, { status: 400 });
+  try {
+    if (!verifyWebhookSignature(rawBody, signature)) {
+      return NextResponse.json({ message: "Invalid signature" }, { status: 401 });
+    }
+  } catch {
+    return NextResponse.json({ message: "Webhook verification failed" }, { status: 500 });
   }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return NextResponse.json({ message: "Invalid JSON" }, { status: 400 });
+  }
+
+  const meta = payload.meta as Record<string, unknown> | undefined;
+  const eventName = meta?.event_name;
+
+  if (eventName !== "order_created") {
+    return NextResponse.json({ ok: true });
+  }
+
+  const customData = meta?.custom_data as Record<string, string> | undefined;
+  const sessionId = customData?.session_id;
+  if (!sessionId) {
+    return NextResponse.json({ message: "Missing session_id in custom data" }, { status: 400 });
+  }
+
+  const data = payload.data as Record<string, unknown> | undefined;
+  const orderId = String(data?.id || `ls_${Date.now()}`);
 
   const checkout = await getCheckoutSession(sessionId);
   if (!checkout) {
     return NextResponse.json({ message: "Session not found" }, { status: 404 });
   }
 
-  const payment = await completeCheckout(sessionId, stripePaymentId);
-  if (!payment) {
-    return NextResponse.json({ message: "Checkout already completed" }, { status: 409 });
+  if (checkout.status === "paid") {
+    return NextResponse.json({ ok: true });
   }
 
-  const tokenPayload =
-    payment.type === "daily_pick"
-      ? {
-          type: "daily" as const,
-          sub: payment.stripeCustomerEmail,
-          date: getEstDateKey(new Date(payment.grantedAt)),
-        }
-      : {
-          type: "chat" as const,
-          sub: payment.stripeCustomerEmail,
-          date: getEstDateKey(new Date(payment.grantedAt)),
-          sessionId: payment.metadata.chatSessionId,
-          gameId: payment.metadata.gameId,
-        };
+  await completeCheckout(sessionId, `ls_${orderId}`);
 
-  return NextResponse.json({
-    payment,
-    accessToken: issueAccessToken(tokenPayload),
-  });
+  return NextResponse.json({ ok: true });
 }

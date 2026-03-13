@@ -12,6 +12,7 @@ import ShareCard from "@/components/ShareCard";
 import { GameListSkeleton } from "@/components/LoadingSkeleton";
 import type { Game, TodayPrediction, ChatMessage } from "@/components/types";
 import { DAILY_TOKEN_KEY } from "@/components/utils";
+import { pollCheckoutStatus } from "@/components/api";
 
 function splitTeaser(text: string): { headline: string; body: string } {
   const lines = text.split("\n").filter((line) => line.trim().length > 0);
@@ -129,6 +130,27 @@ export default function HomePage() {
         ]);
         if (pBody) setTodayPrediction(pBody);
         setSocialProof(bBody?.text || "");
+
+        // Handle return from Lemon Squeezy checkout (redirect fallback)
+        const params = new URLSearchParams(window.location.search);
+        const checkoutSessionId = params.get("checkout_session");
+        if (checkoutSessionId) {
+          // Clean the URL
+          window.history.replaceState({}, "", "/");
+          // Poll for payment completion
+          const poll = async () => {
+            for (let i = 0; i < 20; i++) {
+              const token = await pollCheckoutStatus(checkoutSessionId).catch(() => null);
+              if (token) {
+                window.localStorage.setItem(DAILY_TOKEN_KEY, token);
+                await unlockDailyPrediction(token);
+                return;
+              }
+              await new Promise((r) => setTimeout(r, 2000));
+            }
+          };
+          poll();
+        }
 
         const savedToken = window.localStorage.getItem(DAILY_TOKEN_KEY);
         if (savedToken) {

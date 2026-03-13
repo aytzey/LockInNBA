@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import type { Game, ChatMessage, ChatSessionState } from "./types";
 import { formatEstTime, moneyline, validateEmail, CHAT_TOKEN_PREFIX } from "./utils";
-import { createCheckout, finalizeCheckout } from "./api";
+import { createCheckout, waitForCheckout, mockComplete } from "./api";
 import MarkdownContent from "./MarkdownContent";
 
 interface ChatModalProps {
@@ -101,17 +101,36 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
     }
   }
 
+  async function openCheckoutAndWait(type: "match_chat" | "extra_questions") {
+    if (!chatSession || !chatEmail) return;
+    const checkout = await createCheckout(type, chatEmail, chatSession.gameId, chatSession.id);
+
+    let token: string;
+    if (checkout.checkoutUrl === "__mock__") {
+      token = await mockComplete(checkout.sessionId);
+    } else {
+      const popup = window.open(checkout.checkoutUrl, "lemonsqueezy", "width=460,height=720,left=200,top=100");
+      if (!popup) {
+        window.location.href = checkout.checkoutUrl;
+        return;
+      }
+      token = await waitForCheckout(checkout.sessionId);
+      try { popup.close(); } catch {}
+    }
+
+    window.localStorage.setItem(`${CHAT_TOKEN_PREFIX}${chatSession.id}`, token);
+    setChatToken(token);
+    await refreshChatSession(chatSession.id);
+    return token;
+  }
+
   async function ensureChatPaid() {
     if (!chatSession || !chatEmail) return;
     if (!validateEmail(chatEmail)) { setChatError("Enter a valid email address."); return; }
     if (chatSession.isPaid && chatQuestionsRemaining > 0) return;
     setChatError("");
     try {
-      const checkout = await createCheckout("match_chat", chatEmail, chatSession.gameId, chatSession.id);
-      const token = await finalizeCheckout(checkout.sessionId);
-      window.localStorage.setItem(`${CHAT_TOKEN_PREFIX}${chatSession.id}`, token);
-      setChatToken(token);
-      await refreshChatSession(chatSession.id);
+      await openCheckoutAndWait("match_chat");
       toast.success("Chat unlocked! Ask your questions.");
       inputRef.current?.focus();
     } catch (error) {
@@ -123,11 +142,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
     if (!chatSession || !chatEmail) { setChatError("Enter your email and unlock first."); return; }
     setChatError("");
     try {
-      const checkout = await createCheckout("extra_questions", chatEmail, chatSession.gameId, chatSession.id);
-      const token = await finalizeCheckout(checkout.sessionId);
-      window.localStorage.setItem(`${CHAT_TOKEN_PREFIX}${chatSession.id}`, token);
-      setChatToken(token);
-      await refreshChatSession(chatSession.id);
+      await openCheckoutAndWait("extra_questions");
       toast.success("+3 questions unlocked!");
       inputRef.current?.focus();
     } catch (error) {

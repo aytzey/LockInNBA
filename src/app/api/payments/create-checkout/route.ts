@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateTodayPrediction } from "@/lib/daily-edge";
 import { createCheckoutSession } from "@/lib/store";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { isLemonSqueezyConfigured, createLemonCheckout } from "@/lib/lemonsqueezy";
 
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") || "unknown";
@@ -45,10 +46,28 @@ export async function POST(request: NextRequest) {
     chatSessionId,
   });
 
+  if (isLemonSqueezyConfigured()) {
+    const origin = request.headers.get("origin") || request.nextUrl.origin;
+    const checkoutUrl = await createLemonCheckout({
+      type,
+      email,
+      sessionId: result.id,
+      redirectUrl: `${origin}/checkout-success?session_id=${result.id}`,
+    });
+
+    return NextResponse.json({
+      sessionId: result.id,
+      amount: result.amount,
+      currency: "USD",
+      checkoutUrl,
+    });
+  }
+
+  // Fallback: mock checkout for local development
   return NextResponse.json({
     sessionId: result.id,
     amount: result.amount,
     currency: "USD",
-    checkoutUrl: `/api/payments/mock-complete?sessionId=${result.id}`,
+    checkoutUrl: `__mock__`,
   });
 }
