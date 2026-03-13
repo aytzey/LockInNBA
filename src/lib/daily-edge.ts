@@ -245,6 +245,21 @@ export async function getOrCreateTodayPrediction(date = getEstDateKey()): Promis
   return result.prediction;
 }
 
+export async function getPublicPredictionPreview(date = getEstDateKey()): Promise<DailyPrediction> {
+  const existing = await getTodayPrediction(date);
+
+  if (hasPredictionContent(existing)) {
+    if (shouldRefreshPrediction(existing, false)) {
+      void refreshPredictionForDate(date).catch(() => undefined);
+    }
+
+    return existing;
+  }
+
+  const result = await refreshPredictionForDate(date);
+  return result.prediction;
+}
+
 export async function refreshLiveData(dates: string[], forcePrediction = false): Promise<Array<{
   date: string;
   gameCount: number;

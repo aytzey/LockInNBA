@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { getOrCreateTodayPrediction } from "@/lib/daily-edge";
+import { getPublicPredictionPreview } from "@/lib/daily-edge";
 import { getEstDateKey } from "@/lib/time";
 
 export async function GET() {
   const date = getEstDateKey();
-  const prediction = await getOrCreateTodayPrediction(date);
+  const prediction = await getPublicPredictionPreview(date);
 
   return NextResponse.json({
     date,
