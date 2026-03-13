@@ -250,37 +250,48 @@ export function mergeLatestGames(cachedGames: Game[], latestGames: Game[]): Game
   return merged.sort(sortGames);
 }
 
+const ESPN_FETCH_TIMEOUT_MS = 8_000;
+
 export async function fetchTodayGames(
   date = getEstDateKey(),
   options?: { bypassCache?: boolean },
 ): Promise<Game[]> {
   const espnDate = date.replaceAll("-", "");
-  const response = await fetch(
-    `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${espnDate}&limit=20`,
-    options?.bypassCache
-      ? {
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
-      }
-      : {
-        next: { revalidate: 60 },
-        headers: {
-          Accept: "application/json",
-        },
-      },
-  );
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), ESPN_FETCH_TIMEOUT_MS);
 
-  if (!response.ok) {
-    throw new Error(`ESPN scoreboard request failed with ${response.status}`);
+  try {
+    const response = await fetch(
+      `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${espnDate}&limit=20`,
+      options?.bypassCache
+        ? {
+          cache: "no-store",
+          signal: controller.signal,
+          headers: {
+            Accept: "application/json",
+          },
+        }
+        : {
+          next: { revalidate: 60 },
+          signal: controller.signal,
+          headers: {
+            Accept: "application/json",
+          },
+        },
+    );
+
+    if (!response.ok) {
+      throw new Error(`ESPN scoreboard request failed with ${response.status}`);
+    }
+
+    const payload = await response.json() as EspnScoreboardResponse;
+    return (payload.events || [])
+      .map((event) => toGame(event, date))
+      .filter((game): game is Game => Boolean(game))
+      .sort(sortGames);
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  const payload = await response.json() as EspnScoreboardResponse;
-  return (payload.events || [])
-    .map((event) => toGame(event, date))
-    .filter((game): game is Game => Boolean(game))
-    .sort(sortGames);
 }
 
 export function buildHeuristicDailyPrediction(games: Game[]): {

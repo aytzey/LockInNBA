@@ -57,37 +57,46 @@ function readTextContent(content: OpenRouterContent | undefined): string {
   return "";
 }
 
+const LLM_FETCH_TIMEOUT_MS = 15_000;
+
 async function callOpenRouter(messages: ModelMessage[], options?: { maxTokens?: number; temperature?: number }): Promise<string> {
   const config = getOpenRouterConfig();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), LLM_FETCH_TIMEOUT_MS);
 
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": config.siteUrl,
-      "X-Title": config.siteName,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages,
-      max_tokens: options?.maxTokens ?? 500,
-      temperature: options?.temperature ?? 0.4,
-    }),
-    cache: "no-store",
-  });
+  try {
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": config.siteUrl,
+        "X-Title": config.siteName,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages,
+        max_tokens: options?.maxTokens ?? 500,
+        temperature: options?.temperature ?? 0.4,
+      }),
+      cache: "no-store",
+      signal: controller.signal,
+    });
 
-  const payload = await response.json().catch(() => null) as OpenRouterResponse & { error?: { message?: string } } | null;
-  if (!response.ok) {
-    throw new Error(payload?.error?.message || `OpenRouter request failed with ${response.status}`);
+    const payload = await response.json().catch(() => null) as OpenRouterResponse & { error?: { message?: string } } | null;
+    if (!response.ok) {
+      throw new Error(payload?.error?.message || `OpenRouter request failed with ${response.status}`);
+    }
+
+    const text = readTextContent(payload?.choices?.[0]?.message?.content);
+    if (!text) {
+      throw new Error("OpenRouter returned an empty response");
+    }
+
+    return text;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  const text = readTextContent(payload?.choices?.[0]?.message?.content);
-  if (!text) {
-    throw new Error("OpenRouter returned an empty response");
-  }
-
-  return text;
 }
 
 function extractJsonObject(source: string): Record<string, unknown> | null {

@@ -1,6 +1,5 @@
 import { after, NextResponse } from "next/server";
 import {
-  getOrCreateTodayPrediction,
   predictionHasContent,
   predictionNeedsRefresh,
   refreshPredictionForDate,
@@ -11,9 +10,10 @@ import { getEstDateKey } from "@/lib/time";
 export async function GET() {
   const date = getEstDateKey();
   const existing = await getTodayPrediction(date);
-  const prediction = predictionHasContent(existing) ? existing : await getOrCreateTodayPrediction(date);
 
-  if (predictionHasContent(existing) && predictionNeedsRefresh(existing, false)) {
+  // Never block the response on a slow LLM call.  Serve whatever is in the DB
+  // right now and kick off generation / refresh in the background.
+  if (!predictionHasContent(existing) || predictionNeedsRefresh(existing, false)) {
     after(async () => {
       try {
         await refreshPredictionForDate(date);
@@ -25,9 +25,9 @@ export async function GET() {
 
   return NextResponse.json({
     date,
-    isNoEdgeDay: prediction.isNoEdgeDay,
-    teaserText: prediction.teaserText,
-    hasPrediction: Boolean(prediction.markdownContent.trim()),
+    isNoEdgeDay: existing.isNoEdgeDay,
+    teaserText: existing.teaserText,
+    hasPrediction: Boolean(existing.markdownContent.trim()),
     isBlurred: true,
   });
 }
