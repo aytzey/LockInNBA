@@ -1,9 +1,9 @@
 "use client";
 
 import { forwardRef } from "react";
-import Image from "next/image";
 import type { Game, ChatMessage } from "./types";
 import { moneyline } from "./utils";
+import { LockinBrand, LockinMark } from "./LockinBrand";
 
 interface ShareCardProps {
   mode: "daily" | "chat";
@@ -25,16 +25,17 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
     >
       <div className="h-1 bg-gradient-to-r from-[#0a0e1a] via-[#00c853] to-[#0a0e1a]" />
 
-      <div className="p-8">
+      <div className="relative overflow-hidden p-8">
+        <div className="pointer-events-none absolute right-8 top-20 opacity-[0.08]">
+          <LockinMark className="h-28 w-28" />
+        </div>
         <div className="flex items-center justify-between border-b border-white/10 pb-5">
-          <div className="flex items-center gap-3">
-            <Image src="/lockin-logo.png" alt="LOCKIN" width={130} height={40} />
-          </div>
+          <LockinBrand compact />
           <div className="mono text-xs text-[#8b92a5]">lockinpicks.com</div>
         </div>
 
         {mode === "daily" ? (
-          <div className="mt-6">
+          <div className="relative mt-6">
             <div className="mb-1 text-[10px] font-medium uppercase tracking-widest text-[#00c853]">Tonight&apos;s Edge</div>
             <div className="heading mb-3 text-2xl font-bold text-[#f5f5f3]">LOCKIN Daily Edge</div>
             <div className="mb-4 text-sm text-[#8b92a5]">{headline}</div>
@@ -43,7 +44,7 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
             </div>
           </div>
         ) : (
-          <div className="mt-6">
+          <div className="relative mt-6">
             <div className="mb-1 text-[10px] font-medium uppercase tracking-widest text-[#00c853]">Match Insight</div>
             <div className="heading mb-3 text-2xl font-bold text-[#f5f5f3]">
               {selectedGame

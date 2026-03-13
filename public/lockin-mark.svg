@@ -1,0 +1,68 @@
+<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="shell" x1="10" y1="8" x2="79" y2="82" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#101828" />
+      <stop offset="0.6" stop-color="#0A0E1A" />
+      <stop offset="1" stop-color="#070B14" />
+    </linearGradient>
+    <linearGradient id="court" x1="20" y1="22" x2="58" y2="69" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#101B2E" />
+      <stop offset="1" stop-color="#09111B" />
+    </linearGradient>
+    <linearGradient id="visor" x1="22" y1="40" x2="54" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6EF29A" />
+      <stop offset="0.55" stop-color="#00C853" />
+      <stop offset="1" stop-color="#0E8F44" />
+    </linearGradient>
+    <linearGradient id="shackle" x1="58" y1="12" x2="79" y2="39" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7CF4A5" />
+      <stop offset="1" stop-color="#00C853" />
+    </linearGradient>
+    <filter id="glow" x="13" y="31" width="50" height="27" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="3.2" />
+    </filter>
+    <filter id="shackle-glow" x="48" y="1" width="37" height="47" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="3.2" />
+    </filter>
+  </defs>
+
+  <rect x="4" y="4" width="80" height="80" rx="24" fill="url(#shell)" />
+  <rect x="4.5" y="4.5" width="79" height="79" rx="23.5" stroke="rgba(139, 146, 165, 0.18)" />
+
+  <path d="M12 24C17 18 23 13 34 12" stroke="rgba(255, 215, 0, 0.38)" stroke-width="1.4" stroke-linecap="round" />
+  <path d="M55 76C67 75 75 70 79 60" stroke="rgba(255, 215, 0, 0.26)" stroke-width="1.4" stroke-linecap="round" />
+
+  <circle cx="38" cy="46" r="23" fill="url(#court)" stroke="rgba(245, 245, 243, 0.14)" stroke-width="1.5" />
+  <path d="M38 23V69" stroke="rgba(139, 146, 165, 0.34)" stroke-width="1.6" stroke-linecap="round" />
+  <path
+    d="M23 30C29.4 35.2 32 40.1 32 46C32 51.9 29.4 56.8 23 62"
+    stroke="rgba(139, 146, 165, 0.3)"
+    stroke-width="1.6"
+    stroke-linecap="round"
+  />
+  <path
+    d="M53 30C46.6 35.2 44 40.1 44 46C44 51.9 46.6 56.8 53 62"
+    stroke="rgba(139, 146, 165, 0.3)"
+    stroke-width="1.6"
+    stroke-linecap="round"
+  />
+
+  <rect x="20" y="40" width="35" height="11" rx="5.5" fill="rgba(0, 200, 83, 0.18)" filter="url(#glow)" />
+  <rect x="21" y="39.5" width="34" height="11" rx="5.5" fill="url(#visor)" stroke="rgba(245, 245, 243, 0.12)" />
+  <circle cx="31" cy="45" r="4.4" fill="rgba(8, 17, 27, 0.72)" />
+  <circle cx="46.5" cy="45" r="4.4" fill="rgba(8, 17, 27, 0.72)" />
+  <path d="M26.5 45H35.4" stroke="rgba(245, 245, 243, 0.35)" stroke-width="1.1" stroke-linecap="round" />
+  <path d="M26.5 45V40.6" stroke="rgba(245, 245, 243, 0.2)" stroke-width="1.1" stroke-linecap="round" />
+  <path d="M21 45H55" stroke="rgba(8, 17, 27, 0.42)" stroke-width="1.2" stroke-linecap="round" />
+
+  <path
+    d="M59 24V18.5C59 12.4 63.9 7.5 70 7.5C75.6 7.5 80.2 11.8 80.9 17.2"
+    stroke="url(#shackle)"
+    stroke-width="4.8"
+    stroke-linecap="round"
+    filter="url(#shackle-glow)"
+  />
+  <rect x="53.5" y="21" width="24.5" height="21" rx="7" fill="rgba(9, 17, 27, 0.96)" stroke="rgba(0, 200, 83, 0.42)" stroke-width="1.5" />
+  <circle cx="65.8" cy="30" r="2.8" fill="#00C853" />
+  <path d="M65.8 33.3V37.1" stroke="#00C853" stroke-width="2.4" stroke-linecap="round" />
+</svg>

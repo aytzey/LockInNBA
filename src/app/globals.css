@@ -196,6 +196,130 @@ textarea:-webkit-autofill {
   overflow: hidden;
 }
 
+.site-header::before,
+.hero-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 200, 83, 0.6), rgba(255, 215, 0, 0.35), transparent);
+  opacity: 0.85;
+}
+
+.site-header::after,
+.hero-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at top left, rgba(0, 200, 83, 0.08), transparent 28%),
+    radial-gradient(circle at 88% 18%, rgba(255, 215, 0, 0.07), transparent 18%);
+}
+
+.site-header > *,
+.hero-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.brand-lockup__mark {
+  width: 3.15rem;
+  height: 3.15rem;
+  flex: none;
+  filter: drop-shadow(0 10px 20px rgba(0, 200, 83, 0.16));
+}
+
+.brand-lockup__copy {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.brand-lockup__wordmark {
+  color: var(--pure-white);
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.18rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  line-height: 0.94;
+  text-transform: uppercase;
+}
+
+.brand-lockup__rail {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.brand-lockup__line {
+  width: 4.5rem;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(139, 146, 165, 0.18), rgba(0, 200, 83, 0.52), rgba(255, 215, 0, 0.32));
+}
+
+.brand-lockup__pulse {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: var(--money-green);
+  box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.26);
+  animation: glowPulse 2.6s infinite;
+}
+
+.brand-lockup--compact {
+  gap: 0.7rem;
+}
+
+.brand-lockup--compact .brand-lockup__mark {
+  width: 2.6rem;
+  height: 2.6rem;
+}
+
+.brand-lockup--compact .brand-lockup__wordmark {
+  font-size: 1rem;
+  letter-spacing: 0.18em;
+}
+
+.brand-lockup--compact .brand-lockup__line {
+  width: 3.25rem;
+}
+
+.site-header__meta {
+  display: grid;
+  justify-items: end;
+  gap: 0.45rem;
+}
+
+.site-header__date {
+  color: var(--silver-gray);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.site-header__note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 200, 83, 0.18);
+  background: rgba(0, 200, 83, 0.08);
+  padding: 0.34rem 0.72rem;
+  color: var(--money-green);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
 .social-banner {
   position: relative;
   overflow: hidden;
@@ -257,6 +381,8 @@ textarea:-webkit-autofill {
 }
 
 .hero-card {
+  position: relative;
+  overflow: hidden;
   padding: 1.6rem;
 }
 
@@ -283,7 +409,54 @@ textarea:-webkit-autofill {
 }
 
 .hero-preview__blur-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   padding: 1.6rem 1.4rem;
+}
+
+.hero-preview__blur-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.025), transparent 42%),
+    repeating-linear-gradient(
+      180deg,
+      rgba(139, 146, 165, 0.03) 0,
+      rgba(139, 146, 165, 0.03) 1px,
+      transparent 1px,
+      transparent 32px
+    );
+}
+
+.hero-preview__blur-shell::after {
+  content: "";
+  position: absolute;
+  right: -10%;
+  top: -24%;
+  width: 45%;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(0, 200, 83, 0.18), transparent 70%);
+  z-index: 0;
+}
+
+.hero-preview__brandwash {
+  position: absolute;
+  right: 1rem;
+  top: 0.9rem;
+  z-index: 0;
+  width: 4.6rem;
+  height: 4.6rem;
+  opacity: 0.14;
+  transform: rotate(6deg);
+}
+
+.hero-preview__blur-stack {
+  position: relative;
+  z-index: 1;
 }
 
 .hero-preview__blur-line {
@@ -821,12 +994,36 @@ textarea:-webkit-autofill {
 }
 
 @media (max-width: 768px) {
+  .brand-lockup {
+    gap: 0.72rem;
+  }
+
+  .brand-lockup__mark {
+    width: 2.8rem;
+    height: 2.8rem;
+  }
+
+  .brand-lockup__wordmark {
+    font-size: 1.02rem;
+    letter-spacing: 0.18em;
+  }
+
+  .brand-lockup__line {
+    width: 3.1rem;
+  }
+
   .hero-card {
     padding: 1.3rem;
   }
 
   .hero-preview__headline {
     font-size: 2.2rem;
+  }
+
+  .hero-preview__brandwash {
+    width: 3.8rem;
+    height: 3.8rem;
+    opacity: 0.11;
   }
 }
 

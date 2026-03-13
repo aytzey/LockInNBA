@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { ToasterProvider } from "@/components/ToasterProvider";
@@ -24,6 +24,15 @@ const monoFont = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "LOCKIN | Tonight's Edge",
   description: "LOCKIN sells one premium NBA edge per night and paid per-game AI matchup reads.",
+  icons: {
+    icon: [{ url: "/lockin-mark.svg", type: "image/svg+xml" }],
+    shortcut: "/lockin-mark.svg",
+    apple: "/lockin-mark.svg",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0A0E1A",
 };
 
 export default function RootLayout({

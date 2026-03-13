@@ -7,6 +7,7 @@ import type { TodayPrediction } from "./types";
 import { DAILY_TOKEN_KEY } from "./utils";
 import { createCheckout, waitForCheckout, mockComplete } from "./api";
 import MarkdownContent from "./MarkdownContent";
+import { LockinMark } from "./LockinBrand";
 
 interface TonightsEdgeProps {
   prediction: TodayPrediction | null;
@@ -224,7 +225,10 @@ function TonightsEdgeContent({
             <div className="hero-preview">
               <h1 className="heading hero-preview__headline">{preview.headline}</h1>
               <div className="hero-preview__blur-shell">
-                <div className="blurred space-y-3">
+                <div className="hero-preview__brandwash" aria-hidden="true">
+                  <LockinMark className="h-full w-full" />
+                </div>
+                <div className="hero-preview__blur-stack blurred space-y-3">
                   {preview.blurredLines.map((line, index) => (
                     <p key={index} className="hero-preview__blur-line">
                       {line}
