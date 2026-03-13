@@ -26,12 +26,27 @@ export function isLemonSqueezyConfigured(): boolean {
 
 export async function createLemonCheckout(opts: {
   type: "daily_pick" | "match_chat" | "extra_questions";
-  email: string;
+  email?: string;
   sessionId: string;
   redirectUrl: string;
 }): Promise<string> {
   const variantId = VARIANT_MAP[opts.type];
   if (!variantId) throw new Error(`No Lemon Squeezy variant configured for ${opts.type}`);
+
+  const checkoutData = {
+    custom: {
+      session_id: opts.sessionId,
+    },
+  } as {
+    email?: string;
+    custom: {
+      session_id: string;
+    };
+  };
+
+  if (opts.email?.trim()) {
+    checkoutData.email = opts.email.trim().toLowerCase();
+  }
 
   const res = await fetch(`${API_BASE}/checkouts`, {
     method: "POST",
@@ -44,12 +59,7 @@ export async function createLemonCheckout(opts: {
       data: {
         type: "checkouts",
         attributes: {
-          checkout_data: {
-            email: opts.email,
-            custom: {
-              session_id: opts.sessionId,
-            },
-          },
+          checkout_data: checkoutData,
           checkout_options: {
             embed: true,
             media: false,

@@ -18,6 +18,15 @@ export interface SocialProofBanner {
   updatedAt: string;
 }
 
+export interface SiteCopy {
+  id: string;
+  dailyCtaText: string;
+  noEdgeMessage: string;
+  headerRightText: string;
+  footerDisclaimer: string;
+  updatedAt: string;
+}
+
 export interface SystemPrompt {
   id: string;
   content: string;

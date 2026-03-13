@@ -32,6 +32,7 @@ Double-check auth before changing these.
 - `games/today` is intentionally dynamic and no-store
 - `predictions/today` returns preview metadata, not full paid markdown
 - `social-proof` returns only active public banner text
+- `site-copy` returns public CTA, no-edge, header, and footer copy for the homepage
 
 ## Payment/Auth Reality
 

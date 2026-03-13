@@ -3,12 +3,14 @@
 import Image from "next/image";
 import { todayEstLabel } from "./utils";
 
-export default function Header() {
-  return (
-    <header className="site-header relative overflow-hidden rounded-[1.75rem] px-5 py-4 md:px-6">
-      <div className="site-header__mesh" />
+interface HeaderProps {
+  note?: string;
+}
 
-      <div className="relative flex items-center justify-between gap-3">
+export default function Header({ note = "" }: HeaderProps) {
+  return (
+    <header className="site-header rounded-[1.5rem] px-5 py-4 md:px-6">
+      <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Image
             src="/lockin-logo.svg"
@@ -17,16 +19,17 @@ export default function Header() {
             height={40}
             priority
           />
-          <span className="hidden rounded-full border border-[color:var(--accent-line)] bg-[color:var(--accent-soft)] px-3 py-1 text-[10px] font-semibold tracking-[0.22em] text-[color:var(--accent-strong)] sm:inline-block">
-            LIVE BOARD
-          </span>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="hidden text-right sm:block">
-            <div className="text-[10px] uppercase tracking-[0.22em] text-[var(--muted)]">Eastern Time</div>
-            <div className="mono text-xs text-[var(--text-soft)]">{todayEstLabel()}</div>
+
+        <div className="text-right">
+          <div className="mono text-[11px] text-[color:var(--silver-gray)]">
+            {todayEstLabel()} EST
           </div>
-          <div className="status-orb hidden sm:block" />
+          {note ? (
+            <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[color:var(--money-green)]">
+              {note}
+            </div>
+          ) : null}
         </div>
       </div>
     </header>

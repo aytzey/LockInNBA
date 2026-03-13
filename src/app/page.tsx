@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Header from "@/components/Header";
 import SocialProofBanner from "@/components/SocialProofBanner";
@@ -10,51 +10,71 @@ import ChatModal from "@/components/ChatModal";
 import RestoreAccess from "@/components/RestoreAccess";
 import ShareCard from "@/components/ShareCard";
 import { GameListSkeleton } from "@/components/LoadingSkeleton";
-import type { Game, TodayPrediction, ChatMessage } from "@/components/types";
+import type { Game, TodayPrediction, ChatMessage, SiteCopy } from "@/components/types";
 import { CHAT_SESSION_RESTORE_PREFIX, CHAT_TOKEN_PREFIX, DAILY_TOKEN_KEY } from "@/components/utils";
 import { pollCheckoutStatus } from "@/components/api";
 
+const LIVE_BOARD_POLL_MS = 20_000;
+const ACTIVE_SLATE_POLL_MS = 90_000;
+const QUIET_SLATE_POLL_MS = 5 * 60_000;
+const DEFAULT_SOCIAL_PROOF = "This Week: 5-0 (100%) | +19.3u ROI";
+const DEFAULT_SITE_COPY: SiteCopy = {
+  dailyCtaText: "Unlock Tonight's Edge — $5",
+  noEdgeMessage: "We passed on 90% of this week's games. We only bet when the math screams.",
+  headerRightText: "",
+  footerDisclaimer:
+    "For entertainment purposes only. LOCKIN does not accept wagers or guarantee outcomes. If you or someone you know has a gambling problem, call 1-800-GAMBLER.",
+};
+
 function splitTeaser(text: string): { headline: string; body: string } {
   const lines = text.split("\n").filter((line) => line.trim().length > 0);
-  const headline = lines.slice(0, 2).join(" ") || "Today's board is being filtered for the cleanest moneyline lane.";
-  const body = lines.slice(2).join("\n") || "The full report stays locked until daily access is opened.";
+  const headline = lines.slice(0, 2).join(" ") || "Our engine went 5-0 this week. Tonight's edge is ready.";
+  const body = lines.slice(2).join("\n");
   return { headline, body };
+}
+
+function buildSocialProof(baseText: string, isNoEdgeDay: boolean): string {
+  if (!isNoEdgeDay) {
+    return baseText;
+  }
+
+  if (baseText.startsWith("Today: No Edge")) {
+    return baseText;
+  }
+
+  return `Today: No Edge — Protecting Your Bankroll | ${baseText}`;
 }
 
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
-    transition: { staggerChildren: 0.08, delayChildren: 0.1 },
+    transition: { staggerChildren: 0.08, delayChildren: 0.08 },
   },
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 16 },
+  hidden: { opacity: 0, y: 14 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
+    transition: { duration: 0.38, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
   },
 };
 
 const gameCardVariants = {
-  hidden: { opacity: 0, y: 12, scale: 0.98 },
-  visible: (i: number) => ({
+  hidden: { opacity: 0, y: 10, scale: 0.98 },
+  visible: (index: number) => ({
     opacity: 1,
     y: 0,
     scale: 1,
     transition: {
-      duration: 0.35,
-      delay: i * 0.06,
+      duration: 0.32,
+      delay: index * 0.05,
       ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
     },
   }),
 };
-
-const LIVE_BOARD_POLL_MS = 20_000;
-const ACTIVE_SLATE_POLL_MS = 90_000;
-const QUIET_SLATE_POLL_MS = 5 * 60_000;
 
 export default function HomePage() {
   const shareCardRef = useRef<HTMLDivElement>(null);
@@ -62,7 +82,8 @@ export default function HomePage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [todayPrediction, setTodayPrediction] = useState<TodayPrediction | null>(null);
-  const [socialProof, setSocialProof] = useState("");
+  const [socialProofBase, setSocialProofBase] = useState(DEFAULT_SOCIAL_PROOF);
+  const [siteCopy, setSiteCopy] = useState<SiteCopy>(DEFAULT_SITE_COPY);
   const [games, setGames] = useState<Game[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
 
@@ -76,6 +97,10 @@ export default function HomePage() {
   const [shareMode, setShareMode] = useState<"daily" | "chat">("daily");
 
   const preview = splitTeaser(todayPrediction?.teaserText || "");
+  const effectiveSocialProof = useMemo(
+    () => buildSocialProof(socialProofBase, Boolean(todayPrediction?.isNoEdgeDay)),
+    [socialProofBase, todayPrediction?.isNoEdgeDay],
+  );
 
   const fetchGames = useCallback(async () => {
     try {
@@ -112,34 +137,42 @@ export default function HomePage() {
       setDailyMarkdown(body.markdown || "");
       setDailyUnlocked(true);
     } catch {
-      // network error — silently fail
+      // keep existing state on network errors
     }
   }, []);
 
   useEffect(() => {
     async function init() {
       try {
-        const [pRes, gamesBody, bRes] = await Promise.all([
+        const [predictionResponse, gamesBody, socialProofResponse, siteCopyResponse] = await Promise.all([
           fetch("/api/predictions/today"),
           fetchGames(),
           fetch("/api/social-proof"),
+          fetch("/api/site-copy"),
         ]);
-        const [pBody, bBody] = await Promise.all([
-          pRes.ok ? pRes.json() : Promise.resolve(null),
-          bRes.ok ? bRes.json() : Promise.resolve(null),
+        const [predictionBody, socialProofBody, siteCopyBody] = await Promise.all([
+          predictionResponse.ok ? predictionResponse.json() : Promise.resolve(null),
+          socialProofResponse.ok ? socialProofResponse.json() : Promise.resolve(null),
+          siteCopyResponse.ok ? siteCopyResponse.json() : Promise.resolve(null),
         ]);
-        if (pBody) setTodayPrediction(pBody);
-        setSocialProof(bBody?.text || "");
 
-        // Handle return from Lemon Squeezy checkout (redirect fallback)
+        if (predictionBody) {
+          setTodayPrediction(predictionBody);
+        }
+        setSocialProofBase(socialProofBody?.text || DEFAULT_SOCIAL_PROOF);
+        setSiteCopy({
+          dailyCtaText: siteCopyBody?.dailyCtaText || DEFAULT_SITE_COPY.dailyCtaText,
+          noEdgeMessage: siteCopyBody?.noEdgeMessage || DEFAULT_SITE_COPY.noEdgeMessage,
+          headerRightText: siteCopyBody?.headerRightText || DEFAULT_SITE_COPY.headerRightText,
+          footerDisclaimer: siteCopyBody?.footerDisclaimer || DEFAULT_SITE_COPY.footerDisclaimer,
+        });
+
         const params = new URLSearchParams(window.location.search);
         const checkoutSessionId = params.get("checkout_session");
         if (checkoutSessionId) {
-          // Clean the URL
           window.history.replaceState({}, "", "/");
-          // Poll for payment completion
           const poll = async () => {
-            for (let i = 0; i < 20; i++) {
+            for (let attempt = 0; attempt < 20; attempt += 1) {
               const result = await pollCheckoutStatus(checkoutSessionId).catch(() => null);
               if (result?.accessToken) {
                 if (result.type === "daily_pick") {
@@ -161,10 +194,11 @@ export default function HomePage() {
                 }
                 return;
               }
-              await new Promise((r) => setTimeout(r, 2000));
+
+              await new Promise((resolve) => setTimeout(resolve, 2000));
             }
           };
-          poll();
+          void poll();
         }
 
         const savedToken = window.localStorage.getItem(DAILY_TOKEN_KEY);
@@ -176,7 +210,7 @@ export default function HomePage() {
       }
     }
 
-    init().catch(() => setIsLoading(false));
+    void init().catch(() => setIsLoading(false));
   }, [fetchGames, unlockDailyPrediction]);
 
   useEffect(() => {
@@ -250,44 +284,48 @@ export default function HomePage() {
     setChatMessages([]);
   }
 
-  async function handleShare() {
+  async function handleShare(nextMode?: "daily" | "chat") {
     if (!shareCardRef.current) return;
-    if (shareMode === "daily" && !dailyUnlocked) return;
+    const mode = nextMode || shareMode;
+    if (mode === "daily" && !dailyUnlocked) return;
 
     setIsShareBusy(true);
+    if (nextMode) {
+      setShareMode(nextMode);
+      await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
+    }
     try {
       const h2c = (await import("html2canvas")).default;
-      const canvas = await h2c(shareCardRef.current, { backgroundColor: "#0a0e1a", scale: 2 });
+      const canvas = await h2c(shareCardRef.current, { backgroundColor: "#0A0E1A", scale: 2 });
       const anchor = document.createElement("a");
       anchor.download = `lockin-insight-${Date.now()}.png`;
       anchor.href = canvas.toDataURL("image/png");
       anchor.click();
     } catch {
-      // could not generate card
+      // share card generation failed silently
     } finally {
       setIsShareBusy(false);
     }
   }
 
-  const liveGames = games.filter((g) => g.status === "live");
-  const upcomingGames = games.filter((g) => g.status === "upcoming");
-  const finalGames = games.filter((g) => g.status === "final");
-  const spotlightGames = [...liveGames, ...upcomingGames, ...finalGames].slice(0, 3);
+  const liveGames = games.filter((game) => game.status === "live");
+  const upcomingGames = games.filter((game) => game.status === "upcoming");
+  const finalGames = games.filter((game) => game.status === "final");
 
   const lastUpdatedLabel = lastUpdatedAt
     ? new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/New_York",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    }).format(new Date(lastUpdatedAt))
+        timeZone: "America/New_York",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }).format(new Date(lastUpdatedAt))
     : "";
 
   function renderGameSection(sectionGames: Game[], startIndex: number) {
-    return sectionGames.map((game, i) => (
+    return sectionGames.map((game, index) => (
       <motion.div
         key={game.id}
-        custom={startIndex + i}
+        custom={startIndex + index}
         variants={gameCardVariants}
         initial="hidden"
         animate="visible"
@@ -299,33 +337,23 @@ export default function HomePage() {
 
   return (
     <main className="noise-overlay min-h-screen">
-      {/* Aurora ambient background */}
       <div className="aurora-bg" />
 
       <motion.div
-        className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col gap-5 px-4 py-6 pb-16 text-sm md:px-8"
+        className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col gap-6 px-4 py-6 pb-16 md:gap-8 md:px-8 md:py-8"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
         <motion.div variants={itemVariants}>
-          <Header />
+          <Header note={siteCopy.headerRightText} />
         </motion.div>
 
-        <AnimatePresence>
-          {socialProof && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <SocialProofBanner text={socialProof} />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <motion.div variants={itemVariants}>
+          <SocialProofBanner text={effectiveSocialProof} />
+        </motion.div>
 
-        <motion.section className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]" variants={itemVariants}>
+        <motion.div variants={itemVariants}>
           <TonightsEdge
             prediction={todayPrediction}
             isLoading={isLoading}
@@ -333,176 +361,85 @@ export default function HomePage() {
             dailyMarkdown={dailyMarkdown}
             onUnlock={unlockDailyPrediction}
             onScrollToGames={() => gameSectionRef.current?.scrollIntoView({ behavior: "smooth" })}
-            onShare={() => {
-              setShareMode("daily");
-              handleShare();
-            }}
+            onShare={() => void handleShare("daily")}
             isShareBusy={isShareBusy}
+            ctaText={siteCopy.dailyCtaText}
+            noEdgeMessage={siteCopy.noEdgeMessage}
           />
+        </motion.div>
 
-          <aside className="slate-panel relative overflow-hidden rounded-[1.75rem] p-5 md:p-6">
-            <div className="slate-panel__glow" />
-            <div className="relative space-y-5">
-              <div>
-                <p className="section-kicker">Slate pulse</p>
-                <h2 className="heading mt-2 text-[1.6rem] leading-none text-white">Tonight&apos;s board, read fast</h2>
-                <p className="mt-2 max-w-sm text-sm text-[var(--muted)]">
-                  Real-time NBA games, moneylines and broadcast context pulled into the board before the chat opens.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div className="slate-stat">
-                  <span className="slate-stat__value">{liveGames.length}</span>
-                  <span className="slate-stat__label">Live</span>
-                </div>
-                <div className="slate-stat">
-                  <span className="slate-stat__value">{upcomingGames.length}</span>
-                  <span className="slate-stat__label">Upcoming</span>
-                </div>
-                <div className="slate-stat">
-                  <span className="slate-stat__value">{finalGames.length}</span>
-                  <span className="slate-stat__label">Final</span>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {spotlightGames.length > 0 ? spotlightGames.map((game) => (
-                  <button
-                    key={game.id}
-                    type="button"
-                    onClick={() => handleOpenChat(game)}
-                    className="slate-spotlight group w-full text-left"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="heading text-base text-white">{game.awayTeam} @ {game.homeTeam}</p>
-                        <p className="mt-1 text-xs text-[var(--muted)]">{game.statusDetail}</p>
-                      </div>
-                      <span className={`slate-status-pill ${game.status === "live" ? "slate-status-pill--live" : ""}`}>
-                        {game.status}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--muted)]">
-                      {(game.status === "live" || game.status === "final") && game.awayScore !== null && game.homeScore !== null && (
-                        <span className="chip">
-                          {game.awayTeam} {game.awayScore} - {game.homeScore} {game.homeTeam}
-                        </span>
-                      )}
-                      <span className="chip">{game.awayTeam} {game.awayMoneyline > 0 ? `+${game.awayMoneyline}` : game.awayMoneyline || "OFF"}</span>
-                      <span className="chip">{game.homeTeam} {game.homeMoneyline > 0 ? `+${game.homeMoneyline}` : game.homeMoneyline || "OFF"}</span>
-                      <span className="chip">{game.spread}</span>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between text-xs text-[var(--muted)]">
-                      <span>{game.broadcast}</span>
-                      <span>{game.venue}</span>
-                    </div>
-                  </button>
-                )) : (
-                  <div className="rounded-[1.35rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] p-4 text-sm text-[var(--muted)]">
-                    Today&apos;s NBA board is currently empty. The next slate will appear here as soon as ESPN posts it.
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between border-t border-[color:var(--line)] pt-4 text-xs text-[var(--muted)]">
-                <span>Verified from live scoreboard and market feed.</span>
-                <span>{lastUpdatedLabel ? `Updated ${lastUpdatedLabel} ET` : "Waiting for sync"}</span>
-              </div>
+        <motion.section ref={gameSectionRef} className="space-y-5 md:space-y-6" variants={itemVariants}>
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="space-y-2">
+              <h2 className="heading text-[1.6rem] text-[color:var(--pure-white)] md:text-[1.9rem]">
+                Tonight&apos;s Matchups
+              </h2>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--silver-gray)]">
+                Moneyline board only
+              </p>
             </div>
-          </aside>
-        </motion.section>
-
-        <motion.section ref={gameSectionRef} className="space-y-4" variants={itemVariants}>
-          <div>
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h2 className="heading text-[1.8rem] text-white">Tonight&apos;s Matchups</h2>
-                <p className="mt-1 text-sm text-[var(--muted)]">
-                  Moneyline board only. Open any matchup for a paid AI read built from the live slate context.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => gameSectionRef.current?.scrollIntoView({ behavior: "smooth" })}
-                className="ghost-button"
-              >
-                Scan the board
-              </button>
+            <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--silver-gray)]">
+              {lastUpdatedLabel ? `Updated ${lastUpdatedLabel} ET` : "Waiting for live sync"}
             </div>
-            <p className="mt-3 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.2em] text-[var(--muted)]">
-              <span className="chip">American odds</span>
-              <span className="chip">Live scoreboard</span>
-              <span className="chip">Ask the model per matchup</span>
-            </p>
           </div>
 
           {isLoading ? (
             <GameListSkeleton />
           ) : games.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.4 }}
-              className="overflow-hidden rounded-[1.75rem] border border-[color:var(--line)] bg-[color:var(--panel)] p-10 text-center shadow-[var(--shadow-soft)]"
-            >
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[color:var(--amber-soft)] ring-1 ring-[color:var(--amber-line)]">
-                <svg className="h-8 w-8 text-[#ff6b35]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <p className="heading text-base font-semibold text-white">No games scheduled for today</p>
-              <p className="mt-2 text-sm text-[var(--muted)]">The next NBA slate will appear here automatically once it is posted.</p>
-            </motion.div>
+            <div className="empty-board-card">
+              <div className="empty-board-card__eyebrow">BOARD STATUS</div>
+              <h3 className="heading empty-board-card__title">Today&apos;s picks are being locked in.</h3>
+              <p className="empty-board-card__body">Check back at 2 PM EST.</p>
+            </div>
           ) : (
-            <div className="space-y-4">
-              {liveGames.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs text-[var(--signal-red)]">
+            <div className="space-y-6 md:space-y-8">
+              {liveGames.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="board-group-label board-group-label--live">
                     <span className="live-dot" />
-                    <span className="font-medium uppercase tracking-wider">Live Now</span>
+                    LIVE
                   </div>
-                  <div className="grid gap-3 xl:grid-cols-2">
+                  <div className="grid gap-4 xl:grid-cols-2">
                     {renderGameSection(liveGames, 0)}
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              {upcomingGames.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">Upcoming</div>
-                  <div className="grid gap-3 xl:grid-cols-2">
+              {upcomingGames.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="board-group-label">UPCOMING</div>
+                  <div className="grid gap-4 xl:grid-cols-2">
                     {renderGameSection(upcomingGames, liveGames.length)}
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              {finalGames.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">Final</div>
-                  <div className="grid gap-3 xl:grid-cols-2">
+              {finalGames.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="board-group-label">FINAL</div>
+                  <div className="grid gap-4 xl:grid-cols-2">
                     {renderGameSection(finalGames, liveGames.length + upcomingGames.length)}
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           )}
         </motion.section>
 
         <motion.div variants={itemVariants}>
-          <RestoreAccess onRestore={unlockDailyPrediction} />
+          <RestoreAccess onRestore={unlockDailyPrediction} footerDisclaimer={siteCopy.footerDisclaimer} />
         </motion.div>
 
         <AnimatePresence>
-          {selectedGame && (
+          {selectedGame ? (
             <ChatModal
               game={selectedGame}
               onClose={handleCloseChat}
-              onShareRequest={() => handleShare()}
+              onShareRequest={() => void handleShare("chat")}
               isShareBusy={isShareBusy}
               onMessagesChange={setChatMessages}
             />
-          )}
+          ) : null}
         </AnimatePresence>
 
         <ShareCard

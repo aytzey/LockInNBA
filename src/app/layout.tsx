@@ -1,27 +1,29 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Instrument_Sans, IBM_Plex_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { ToasterProvider } from "@/components/ToasterProvider";
 
-const displayFont = Bricolage_Grotesque({
+const displayFont = Space_Grotesk({
   subsets: ["latin"],
+  weight: ["500", "700"],
   variable: "--font-display",
 });
 
-const bodyFont = Instrument_Sans({
+const bodyFont = Inter({
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
   variable: "--font-body",
 });
 
-const monoFont = IBM_Plex_Mono({
+const monoFont = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
   variable: "--font-mono",
 });
 
 export const metadata: Metadata = {
-  title: "LOCKIN | Live NBA Board",
-  description: "LOCKIN surfaces a premium daily NBA moneyline edge and per-matchup AI analysis from the live slate.",
+  title: "LOCKIN | Tonight's Edge",
+  description: "LOCKIN sells one premium NBA edge per night and paid per-game AI matchup reads.",
 };
 
 export default function RootLayout({

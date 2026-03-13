@@ -9,7 +9,6 @@ import {
   CHAT_TOKEN_PREFIX,
   formatEstTime,
   moneyline,
-  validateEmail,
 } from "./utils";
 import { createCheckout, waitForCheckout, mockComplete } from "./api";
 import MarkdownContent from "./MarkdownContent";
@@ -31,7 +30,6 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatToken, setChatToken] = useState<string | null>(null);
   const [chatQuestionsRemaining, setChatQuestionsRemaining] = useState(0);
-  const [chatEmail, setChatEmail] = useState("");
   const [chatInput, setChatInput] = useState("");
   const [isChatBusy, setIsChatBusy] = useState(false);
   const [chatError, setChatError] = useState("");
@@ -64,7 +62,6 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
             setChatQuestionsRemaining(restoredData.questionsRemaining ?? 0);
             setChatMessages(restoredData.messages ?? []);
             onMessagesChange(restoredData.messages ?? []);
-            setChatEmail(session.email || "");
             const restoredToken = window.localStorage.getItem(`${CHAT_TOKEN_PREFIX}${session.id}`);
             setChatToken(restoredToken || null);
             return;
@@ -87,7 +84,6 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
         setChatQuestionsRemaining(data.questionsRemaining ?? 0);
         setChatMessages(data.messages ?? []);
         onMessagesChange(data.messages ?? []);
-        setChatEmail(session.email || "");
         const cachedToken = window.localStorage.getItem(`${CHAT_TOKEN_PREFIX}${session.id}`);
         setChatToken(cachedToken || null);
       } catch {
@@ -127,8 +123,12 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
   }
 
   async function openCheckoutAndWait(type: "match_chat" | "extra_questions") {
-    if (!chatSession || !chatEmail) return;
-    const checkout = await createCheckout(type, chatEmail, chatSession.gameId, chatSession.id);
+    if (!chatSession) return;
+    const checkout = await createCheckout({
+      type,
+      gameId: chatSession.gameId,
+      chatSessionId: chatSession.id,
+    });
 
     let token: string;
     if (checkout.checkoutUrl === "__mock__") {
@@ -152,8 +152,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
   }
 
   async function ensureChatPaid() {
-    if (!chatSession || !chatEmail) return;
-    if (!validateEmail(chatEmail)) { setChatError("Enter a valid email address."); return; }
+    if (!chatSession) return;
     if (chatSession.isPaid && chatQuestionsRemaining > 0) return;
     setChatError("");
     try {
@@ -166,7 +165,10 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
   }
 
   async function purchaseExtra() {
-    if (!chatSession || !chatEmail) { setChatError("Enter your email and unlock first."); return; }
+    if (!chatSession) {
+      setChatError("Chat session unavailable.");
+      return;
+    }
     setChatError("");
     try {
       await openCheckoutAndWait("extra_questions");
@@ -191,7 +193,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
           "Content-Type": "application/json",
           Authorization: `Bearer ${chatToken}`,
         },
-        body: JSON.stringify({ sessionId: chatSession.id, message: chatInput.trim(), email: chatEmail }),
+        body: JSON.stringify({ sessionId: chatSession.id, message: chatInput.trim() }),
       });
       const data = await res.json();
       if (res.status === 402) {
@@ -212,6 +214,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
   }
 
   const isPaid = chatSession?.isPaid ?? false;
+  const questionLimit = chatSession?.questionLimit ?? 0;
   const canSend = isPaid && chatQuestionsRemaining > 0 && !isChatBusy;
   const showPaywall = !isPaid || chatQuestionsRemaining <= 0;
 
@@ -241,16 +244,16 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
         >
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <div className="mb-1 flex items-center gap-2">
-                <p className="section-kicker section-kicker--muted">Matchup chat</p>
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--silver-gray)]">Matchup room</p>
                 {game.status === "live" && <span className="live-dot" />}
               </div>
-              <div className="heading flex items-center gap-2 text-xl font-semibold text-white">
+              <div className="heading flex items-center gap-2 text-xl font-semibold text-[color:var(--pure-white)]">
                 {game.awayTeam}
-                <span className="text-sm text-[var(--muted)]/60">@</span>
+                <span className="text-sm text-[color:var(--silver-gray)]">@</span>
                 {game.homeTeam}
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--silver-gray)]">
                 <span>{game.statusDetail}</span>
                 <span className="text-[color:var(--line-strong)]">•</span>
                 <span>{formatEstTime(game.gameTimeEST)} EST</span>
@@ -300,7 +303,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
                 </svg>
               </motion.div>
               <p className="mb-1 text-sm font-medium text-white">Ready to analyze this matchup</p>
-              <p className="max-w-sm text-xs leading-5 text-[var(--muted)]">
+              <p className="max-w-sm text-[11px] leading-5 text-[color:var(--silver-gray)]">
                 {isPaid
                   ? "Ask for market read, team shape, risk framing or game-script pressure."
                   : "Unlock this room for $2 to ask three focused matchup questions."}
@@ -316,13 +319,13 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
               transition={{ duration: 0.3, delay: index === chatMessages.length - 1 ? 0.05 : 0 }}
               className={`rounded-[1.35rem] p-4 ${
                 message.role === "user"
-                  ? "ml-auto max-w-[85%] border border-[color:var(--accent-line)] bg-[color:var(--accent-soft)]"
+                  ? "ml-auto max-w-[85%] border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)]"
                   : "border border-[color:var(--line)] bg-[color:var(--panel-soft)]"
               }`}
             >
               <div className="mono mb-2 flex items-center gap-1.5 text-[11px]">
-                <span className={`inline-block h-1.5 w-1.5 rounded-full ${message.role === "user" ? "bg-[color:var(--accent)]" : "bg-[color:var(--amber)]"}`} />
-                <span className="text-[var(--muted)]">{message.role === "user" ? "You" : "LOCKIN AI"}</span>
+                <span className={`inline-block h-1.5 w-1.5 rounded-full ${message.role === "user" ? "bg-[color:var(--money-green)]" : "bg-[color:var(--gold)]"}`} />
+                <span className="text-[color:var(--silver-gray)]">{message.role === "user" ? "You" : "LOCKIN AI"}</span>
               </div>
               {message.role === "assistant" ? (
                 <MarkdownContent content={message.content} className="text-sm" />
@@ -339,15 +342,15 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
               className="rounded-[1.35rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] p-4"
             >
               <div className="mono mb-2 flex items-center gap-1.5 text-[11px]">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--amber)]" />
-                <span className="text-[var(--muted)]">LOCKIN AI</span>
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--gold)]" />
+                <span className="text-[color:var(--silver-gray)]">LOCKIN AI</span>
               </div>
-              <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+              <div className="flex items-center gap-2 text-sm text-[color:var(--silver-gray)]">
                 <div className="flex gap-1">
                   {[0, 1, 2].map((i) => (
                     <motion.span
                       key={i}
-                      className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--accent)]"
+                      className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--money-green)]"
                       animate={{ y: [0, -6, 0] }}
                       transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
                     />
@@ -372,16 +375,18 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
             </motion.p>
           )}
 
-          <div className="mb-2.5 flex items-center justify-between text-xs">
-            <span className="text-[var(--muted)]">
-              {chatQuestionsRemaining > 0
-                ? `${chatQuestionsRemaining} question${chatQuestionsRemaining === 1 ? "" : "s"} remaining`
-                : "No questions remaining"}
-            </span>
-            <span className={`mono rounded-full px-2 py-0.5 text-[10px] font-medium ${
-              isPaid ? "border border-[color:var(--accent-line)] bg-[color:var(--accent-soft)] text-[color:var(--accent-strong)]" : "border border-[color:var(--amber-line)] bg-[color:var(--amber-soft)] text-[color:var(--amber)]"
+          <div className="mb-3 flex items-center justify-between gap-3 text-xs">
+            <span className={`mono rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] ${
+              isPaid
+                ? "border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)] text-[color:var(--money-green)]"
+                : "border border-[color:var(--gold-line)] bg-[color:var(--gold-soft)] text-[color:var(--gold)]"
             }`}>
               {isPaid ? "Active" : "Locked"}
+            </span>
+            <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-[color:var(--silver-gray)]">
+              {questionLimit > 0
+                ? `${chatQuestionsRemaining}/${questionLimit} questions remaining`
+                : "3 questions included"}
             </span>
           </div>
 
@@ -391,17 +396,6 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
               animate={{ opacity: 1, y: 0 }}
               className="mb-3 space-y-2.5"
             >
-              <div className="space-y-2">
-                <label className="input-label" htmlFor="chat-email">Email for unlock and restore</label>
-                <input
-                  id="chat-email"
-                  value={chatEmail}
-                  onChange={(e) => setChatEmail(e.target.value)}
-                  className="input-field w-full"
-                  type="email"
-                  autoComplete="email"
-                />
-              </div>
               {!isPaid ? (
                 <motion.button
                   type="button"
@@ -410,7 +404,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
                   whileTap={{ scale: 0.98 }}
                   className="primary-button w-full justify-center"
                 >
-                  Unlock this matchup room
+                  Ask AI about this game — $2
                 </motion.button>
               ) : (
                 <motion.button
@@ -420,7 +414,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
                   whileTap={{ scale: 0.98 }}
                   className="secondary-button w-full justify-center"
                 >
-                  Add 3 more questions
+                  +3 more questions — $1
                 </motion.button>
               )}
             </motion.div>
@@ -455,7 +449,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
               </motion.button>
             </div>
             {!canSend && (
-              <p className="text-[11px] text-[var(--muted)]">
+              <p className="text-[11px] text-[color:var(--silver-gray)]">
                 {isPaid ? "Buy more questions to keep the room active." : "Unlock the room to start asking."}
               </p>
             )}

@@ -19,6 +19,7 @@ Created tables:
 
 - `predictions`
 - `social_proof_banner`
+- `site_copy`
 - `system_prompts`
 - `games`
 - `data_refresh_state`
@@ -38,6 +39,7 @@ Main responsibilities:
 
 - CRUD for predictions
 - social proof and system prompt persistence
+- site copy persistence for CTA, no-edge, header, and footer text
 - cached games storage
 - chat session and message storage
 - checkout/payment state transitions
@@ -200,6 +202,8 @@ Hosted-checkout notes:
 - webhook signature verification is implemented for Lemon Squeezy
 - frontend can poll checkout status until the persisted checkout session becomes `paid`
 - `src/app/checkout-success/page.tsx` handles popup-close or redirect-return behavior
+- checkout rows may be created before the buyer enters an email
+- Lemon Squeezy webhook completion should hydrate the real customer email back onto local checkout and payment rows
 
 Current amounts:
 

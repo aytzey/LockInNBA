@@ -6,6 +6,7 @@ import {
   DailyPrediction,
   Game,
   Payment,
+  SiteCopy,
   SocialProofBanner,
   SystemPrompt,
 } from "./types";
@@ -26,6 +27,17 @@ interface DataRefreshState {
   key: string;
   updatedAt: string;
 }
+
+export const DEFAULT_SOCIAL_PROOF_TEXT = "This Week: 5-0 (100%) | +19.3u ROI";
+export const DEFAULT_NO_EDGE_BANNER_PREFIX = "Today: No Edge — Protecting Your Bankroll";
+
+const DEFAULT_SITE_COPY_CONTENT = {
+  dailyCtaText: "Unlock Tonight's Edge — $5",
+  noEdgeMessage: "We passed on 90% of this week's games. We only bet when the math screams.",
+  headerRightText: "",
+  footerDisclaimer:
+    "For entertainment purposes only. LOCKIN does not accept wagers or guarantee outcomes. If you or someone you know has a gambling problem, call 1-800-GAMBLER.",
+};
 
 type RowValue = string | number | boolean | Date | null | undefined;
 
@@ -83,6 +95,17 @@ function mapSystemPrompt(row: Record<string, RowValue>): SystemPrompt {
     version: toNumber(row.version),
     isActive: Boolean(row.is_active),
     createdAt: toIsoString(row.created_at),
+  };
+}
+
+function mapSiteCopy(row: Record<string, RowValue>): SiteCopy {
+  return {
+    id: String(row.id),
+    dailyCtaText: String(row.daily_cta_text ?? DEFAULT_SITE_COPY_CONTENT.dailyCtaText),
+    noEdgeMessage: String(row.no_edge_message ?? DEFAULT_SITE_COPY_CONTENT.noEdgeMessage),
+    headerRightText: String(row.header_right_text ?? DEFAULT_SITE_COPY_CONTENT.headerRightText),
+    footerDisclaimer: String(row.footer_disclaimer ?? DEFAULT_SITE_COPY_CONTENT.footerDisclaimer),
+    updatedAt: toIsoString(row.updated_at),
   };
 }
 
@@ -202,6 +225,10 @@ function amountForPayment(type: "daily_pick" | "match_chat" | "extra_questions")
   if (type === "daily_pick") return 5;
   if (type === "match_chat") return 2;
   return 1;
+}
+
+function syntheticCheckoutEmail(id: string): string {
+  return `guest+${id}@lockin.local`;
 }
 
 function getDate(dateTime: string): string {
@@ -349,6 +376,61 @@ export async function setSocialProofBanner(text: string): Promise<SocialProofBan
   );
 
   return mapSocialProofBanner(result.rows[0] as Record<string, RowValue>);
+}
+
+export async function getSiteCopy(): Promise<SiteCopy> {
+  const result = await query(`SELECT * FROM site_copy WHERE id = 'default' LIMIT 1`);
+
+  if (!result.rows[0]) {
+    return {
+      id: "default",
+      ...DEFAULT_SITE_COPY_CONTENT,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  return mapSiteCopy(result.rows[0] as Record<string, RowValue>);
+}
+
+export async function setSiteCopy(input: {
+  dailyCtaText?: string;
+  noEdgeMessage?: string;
+  headerRightText?: string;
+  footerDisclaimer?: string;
+}): Promise<SiteCopy> {
+  const current = await getSiteCopy();
+  const next = {
+    dailyCtaText: input.dailyCtaText?.trim() || DEFAULT_SITE_COPY_CONTENT.dailyCtaText,
+    noEdgeMessage: input.noEdgeMessage?.trim() || DEFAULT_SITE_COPY_CONTENT.noEdgeMessage,
+    headerRightText: input.headerRightText?.trim() || "",
+    footerDisclaimer: input.footerDisclaimer?.trim() || DEFAULT_SITE_COPY_CONTENT.footerDisclaimer,
+  };
+
+  const result = await query(
+    `INSERT INTO site_copy (
+       id,
+       daily_cta_text,
+       no_edge_message,
+       header_right_text,
+       footer_disclaimer,
+       updated_at
+     ) VALUES ('default', $1, $2, $3, $4, NOW())
+     ON CONFLICT (id) DO UPDATE
+       SET daily_cta_text = EXCLUDED.daily_cta_text,
+           no_edge_message = EXCLUDED.no_edge_message,
+           header_right_text = EXCLUDED.header_right_text,
+           footer_disclaimer = EXCLUDED.footer_disclaimer,
+           updated_at = NOW()
+     RETURNING *`,
+    [
+      next.dailyCtaText || current.dailyCtaText,
+      next.noEdgeMessage || current.noEdgeMessage,
+      next.headerRightText,
+      next.footerDisclaimer || current.footerDisclaimer,
+    ],
+  );
+
+  return mapSiteCopy(result.rows[0] as Record<string, RowValue>);
 }
 
 export async function getActiveSystemPrompt(): Promise<SystemPrompt> {
@@ -618,13 +700,14 @@ export async function remainingQuestions(sessionId: string): Promise<number> {
 }
 
 export async function createCheckoutSession(input: {
-  email: string;
+  email?: string;
   type: "daily_pick" | "match_chat" | "extra_questions";
   gameId?: string;
   chatSessionId?: string;
 }): Promise<{ id: string; amount: number }> {
   const id = crypto.randomUUID();
   const amount = amountForPayment(input.type);
+  const email = input.email?.trim().toLowerCase() || syntheticCheckoutEmail(id);
 
   await query(
     `INSERT INTO checkout_sessions (
@@ -637,7 +720,7 @@ export async function createCheckoutSession(input: {
        status,
        created_at
      ) VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW())`,
-    [id, input.email, input.type, amount, input.gameId ?? null, input.chatSessionId ?? null],
+    [id, email, input.type, amount, input.gameId ?? null, input.chatSessionId ?? null],
   );
 
   return { id, amount };
@@ -648,7 +731,11 @@ export async function getCheckoutSession(id: string): Promise<CheckoutSession | 
   return result.rows[0] ? mapCheckoutSession(result.rows[0] as Record<string, RowValue>) : null;
 }
 
-export async function completeCheckout(sessionId: string, paymentId: string): Promise<Payment | null> {
+export async function completeCheckout(
+  sessionId: string,
+  paymentId: string,
+  customerEmail?: string | null,
+): Promise<Payment | null> {
   return withTransaction(async (client) => {
     const checkoutResult = await client.query(
       `SELECT * FROM checkout_sessions WHERE id = $1 FOR UPDATE`,
@@ -661,10 +748,14 @@ export async function completeCheckout(sessionId: string, paymentId: string): Pr
     }
 
     const checkout = mapCheckoutSession(checkoutRow);
+    const normalizedEmail = customerEmail?.trim().toLowerCase() || checkout.email;
 
     await client.query(
-      `UPDATE checkout_sessions SET status = 'paid' WHERE id = $1`,
-      [sessionId],
+      `UPDATE checkout_sessions
+       SET status = 'paid',
+           email = $2
+       WHERE id = $1`,
+      [sessionId, normalizedEmail],
     );
 
     const createdPayment = await client.query(
@@ -683,7 +774,7 @@ export async function completeCheckout(sessionId: string, paymentId: string): Pr
       [
         crypto.randomUUID(),
         paymentId,
-        checkout.email,
+        normalizedEmail,
         checkout.type,
         checkout.amount,
         checkout.gameId ?? null,
@@ -700,7 +791,7 @@ export async function completeCheckout(sessionId: string, paymentId: string): Pr
              email = $2,
              updated_at = NOW()
          WHERE id = $1`,
-        [checkout.chatSessionId, checkout.email],
+        [checkout.chatSessionId, normalizedEmail],
       );
     }
 
@@ -711,7 +802,7 @@ export async function completeCheckout(sessionId: string, paymentId: string): Pr
              email = $2,
              updated_at = NOW()
          WHERE id = $1`,
-        [checkout.chatSessionId, checkout.email],
+        [checkout.chatSessionId, normalizedEmail],
       );
     }
 

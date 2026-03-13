@@ -9,15 +9,17 @@ export interface CheckoutStatusResult {
 }
 
 export async function createCheckout(
-  type: CheckoutType,
-  email: string,
-  gameId?: string,
-  chatSessionId?: string,
+  input: {
+    type: CheckoutType;
+    email?: string;
+    gameId?: string;
+    chatSessionId?: string;
+  },
 ): Promise<{ sessionId: string; amount: number; checkoutUrl: string }> {
   const res = await fetch("/api/payments/create-checkout", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type, email, gameId, chatSessionId }),
+    body: JSON.stringify(input),
   });
   const payload = await res.json();
   if (!res.ok) {

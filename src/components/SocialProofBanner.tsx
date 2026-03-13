@@ -8,11 +8,20 @@ export default function SocialProofBanner({ text }: SocialProofBannerProps) {
   if (!text) return null;
 
   return (
-    <section className="fade-in social-banner relative overflow-hidden rounded-[1.25rem] p-3.5 text-center">
-      <div className="social-banner__glow" />
-      <div className="relative flex items-center justify-center gap-2.5">
-        <span className="status-orb status-orb--small" />
-        <span className="mono text-sm tracking-wide text-[color:var(--accent-strong)]">{text}</span>
+    <section className="social-banner fade-in">
+      <div className="social-banner__edge social-banner__edge--left" />
+      <div className="social-banner__edge social-banner__edge--right" />
+      <div className="social-banner__track">
+        {[0, 1].map((copy) => (
+          <div key={copy} className="social-banner__marquee">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <span key={`${copy}-${index}`} className="social-banner__item">
+                <span className="social-banner__dot" />
+                <span className="mono">{text}</span>
+              </span>
+            ))}
+          </div>
+        ))}
       </div>
     </section>
   );

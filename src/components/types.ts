@@ -32,6 +32,13 @@ export type TodayPrediction = {
   hasPrediction: boolean;
 };
 
+export type SiteCopy = {
+  dailyCtaText: string;
+  noEdgeMessage: string;
+  headerRightText: string;
+  footerDisclaimer: string;
+};
+
 export type ChatMessage = {
   id: string;
   chatSessionId: string;

@@ -36,6 +36,11 @@ export async function POST(request: NextRequest) {
 
   const data = payload.data as Record<string, unknown> | undefined;
   const orderId = String(data?.id || `ls_${Date.now()}`);
+  const attributes = (data?.attributes as Record<string, unknown> | undefined) ?? {};
+  const customerEmail =
+    typeof attributes.user_email === "string" && attributes.user_email.trim().length > 0
+      ? attributes.user_email.trim().toLowerCase()
+      : undefined;
 
   const checkout = await getCheckoutSession(sessionId);
   if (!checkout) {
@@ -46,7 +51,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  await completeCheckout(sessionId, `ls_${orderId}`);
+  await completeCheckout(sessionId, `ls_${orderId}`, customerEmail);
 
   return NextResponse.json({ ok: true });
 }

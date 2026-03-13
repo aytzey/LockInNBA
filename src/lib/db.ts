@@ -68,6 +68,17 @@ async function runSchemaSetup(): Promise<void> {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS site_copy (
+      id TEXT PRIMARY KEY,
+      daily_cta_text TEXT NOT NULL DEFAULT 'Unlock Tonight''s Edge — $5',
+      no_edge_message TEXT NOT NULL DEFAULT 'We passed on 90% of this week''s games. We only bet when the math screams.',
+      header_right_text TEXT NOT NULL DEFAULT '',
+      footer_disclaimer TEXT NOT NULL DEFAULT 'For entertainment purposes only. LOCKIN does not accept wagers or guarantee outcomes. If you or someone you know has a gambling problem, call 1-800-GAMBLER.',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS system_prompts (
       id TEXT PRIMARY KEY,
       content TEXT NOT NULL,
@@ -208,6 +219,7 @@ async function runSchemaSetup(): Promise<void> {
   const appTables = [
     "predictions",
     "social_proof_banner",
+    "site_copy",
     "system_prompts",
     "games",
     "chat_sessions",

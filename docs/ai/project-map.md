@@ -45,6 +45,7 @@ The app intentionally avoids becoming a full sportsbook UI. The public board is 
 3. Admin can:
    - read/save/delete predictions
    - update social proof banner
+   - update public site copy strings
    - rotate the active system prompt
 
 ## 3. Directory Ownership
@@ -138,6 +139,7 @@ The app intentionally avoids becoming a full sportsbook UI. The public board is 
 
 - predictions
 - social proof banner
+- site copy strings
 - system prompt history
 - cached games by date
 - refresh timestamps
@@ -164,6 +166,7 @@ The app intentionally avoids becoming a full sportsbook UI. The public board is 
 - `GET /api/games/today`
 - `GET /api/predictions/today`
 - `GET /api/social-proof`
+- `GET /api/site-copy`
 - `GET /api/healthz`
 
 ### Paid content routes
@@ -187,6 +190,7 @@ The app intentionally avoids becoming a full sportsbook UI. The public board is 
 - `POST /api/admin/login`
 - `GET|POST|DELETE /api/admin/predictions`
 - `GET|PUT /api/admin/social-proof-banner`
+- `GET|PUT /api/admin/site-copy`
 - `GET|PUT /api/admin/system-prompt`
 
 ### Internal ops route

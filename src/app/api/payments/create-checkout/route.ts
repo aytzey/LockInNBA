@@ -19,10 +19,6 @@ export async function POST(request: NextRequest) {
   const gameId = body?.gameId;
   const chatSessionId = body?.chatSessionId;
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return NextResponse.json({ message: "Valid email required" }, { status: 400 });
-  }
-
   if (type !== "daily_pick" && type !== "match_chat" && type !== "extra_questions") {
     return NextResponse.json({ message: "Invalid product type" }, { status: 400 });
   }
@@ -40,7 +36,7 @@ export async function POST(request: NextRequest) {
   }
 
   const result = await createCheckoutSession({
-    email,
+    email: email || undefined,
     type,
     gameId,
     chatSessionId,
@@ -50,7 +46,7 @@ export async function POST(request: NextRequest) {
     const origin = request.headers.get("origin") || request.nextUrl.origin;
     const checkoutUrl = await createLemonCheckout({
       type,
-      email,
+      email: email || undefined,
       sessionId: result.id,
       redirectUrl: `${origin}/checkout-success?session_id=${result.id}`,
     });

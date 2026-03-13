@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { getSocialProofBanner } from "@/lib/store";
+import { DEFAULT_SOCIAL_PROOF_TEXT, getSocialProofBanner } from "@/lib/store";
 
 export async function GET() {
   const banner = await getSocialProofBanner();
   return NextResponse.json({
-    text: banner?.text ?? "",
-    isActive: Boolean(banner),
+    text: banner?.text || DEFAULT_SOCIAL_PROOF_TEXT,
+    isActive: true,
   });
 }
