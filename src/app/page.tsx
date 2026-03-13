@@ -18,6 +18,7 @@ import { pollCheckoutStatus } from "@/components/api";
 const LIVE_BOARD_POLL_MS = 20_000;
 const ACTIVE_SLATE_POLL_MS = 5 * 60_000;
 const QUIET_SLATE_POLL_MS = 15 * 60_000;
+const EMPTY_BOARD_POLL_MS = 60_000;
 const DEFAULT_SOCIAL_PROOF_MESSAGES = [
   "This Week: 5-0 (100%)",
   "+19.3u ROI",
@@ -134,8 +135,12 @@ export default function HomePage() {
           return nextGames;
         });
       }
-      if (nextGames && nextGames.length > 0) {
-        setLastUpdatedAt(body?.updatedAt || new Date().toISOString());
+      // Always update the timestamp on a successful API response so the UI
+      // never stays stuck on "Waiting for live sync".
+      if (body?.updatedAt) {
+        setLastUpdatedAt(body.updatedAt);
+      } else if (nextGames && nextGames.length > 0) {
+        setLastUpdatedAt(new Date().toISOString());
       }
       return body;
     } catch {
@@ -300,11 +305,13 @@ export default function HomePage() {
 
     const hasLiveGames = games.some((game) => game.status === "live");
     const hasActiveSlate = hasLiveGames || games.some((game) => game.status === "upcoming");
-    const intervalMs = hasLiveGames
-      ? LIVE_BOARD_POLL_MS
-      : hasActiveSlate
-        ? ACTIVE_SLATE_POLL_MS
-        : QUIET_SLATE_POLL_MS;
+    const intervalMs = games.length === 0
+      ? EMPTY_BOARD_POLL_MS
+      : hasLiveGames
+        ? LIVE_BOARD_POLL_MS
+        : hasActiveSlate
+          ? ACTIVE_SLATE_POLL_MS
+          : QUIET_SLATE_POLL_MS;
 
     const refreshGames = async () => {
       if (document.visibilityState === "hidden") {
