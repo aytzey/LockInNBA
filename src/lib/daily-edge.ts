@@ -175,7 +175,15 @@ export async function getFreshGames(date = getEstDateKey(), forceRefresh = false
 
   const job = (async () => {
     try {
-      const games = await fetchTodayGames(date);
+      const games = await fetchTodayGames(date, forceRefresh ? { bypassCache: true } : undefined);
+      if (games.length === 0) {
+        return {
+          games: cachedGames,
+          updatedAt: lastUpdatedAt,
+          refreshed: false,
+        };
+      }
+
       await setGames(date, games);
       const nextState = await touchGamesRefreshState(date);
       return {
@@ -213,10 +221,11 @@ export async function getPublicGames(date = getEstDateKey()): Promise<PublicGame
 
   if (cachedGames.length === 0) {
     const result = await getFreshGames(date);
+    const retryResult = result.games.length === 0 ? await getFreshGames(date, true) : result;
     return {
-      ...result,
+      ...retryResult,
       source: "cache",
-      cacheControl: shouldTrackStartedGames(date, result.games) ? "volatile" : "fixture",
+      cacheControl: shouldTrackStartedGames(date, retryResult.games) ? "volatile" : "fixture",
     };
   }
 

@@ -71,6 +71,7 @@ function buildSocialProofMessages(baseMessages: string[], isNoEdgeDay: boolean):
 export default function HomePage() {
   const shareCardRef = useRef<HTMLDivElement>(null);
   const gameSectionRef = useRef<HTMLDivElement>(null);
+  const hasRetriedEmptyBoardRef = useRef(false);
 
   const [isBoardLoading, setIsBoardLoading] = useState(true);
   const [isPredictionLoading, setIsPredictionLoading] = useState(true);
@@ -123,10 +124,19 @@ export default function HomePage() {
       }
 
       const body = await response.json();
-      if (body?.games) {
-        setGames(body.games);
+      const nextGames = Array.isArray(body?.games) ? (body.games as Game[]) : null;
+      if (nextGames) {
+        setGames((currentGames) => {
+          if (nextGames.length === 0 && currentGames.length > 0) {
+            return currentGames;
+          }
+
+          return nextGames;
+        });
       }
-      setLastUpdatedAt(body?.updatedAt || new Date().toISOString());
+      if (nextGames && nextGames.length > 0) {
+        setLastUpdatedAt(body?.updatedAt || new Date().toISOString());
+      }
       return body;
     } catch {
       return null;
@@ -321,6 +331,21 @@ export default function HomePage() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [fetchGames, games, isBoardLoading]);
+
+  useEffect(() => {
+    if (isBoardLoading || games.length > 0 || hasRetriedEmptyBoardRef.current) {
+      return;
+    }
+
+    hasRetriedEmptyBoardRef.current = true;
+    const timeoutId = window.setTimeout(() => {
+      void fetchGames();
+    }, 1200);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [fetchGames, games.length, isBoardLoading]);
 
   useEffect(() => {
     if (!selectedGame) {
