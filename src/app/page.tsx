@@ -27,10 +27,15 @@ const INIT_SAFETY_TIMEOUT_MS = 12_000;
 function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number, externalSignal?: AbortSignal): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  const signal = externalSignal
-    ? AbortSignal.any([controller.signal, externalSignal])
-    : controller.signal;
-  return fetch(url, { ...options, signal }).finally(() => clearTimeout(timeoutId));
+  // Forward external abort to our controller (Safari < 17.4 lacks AbortSignal.any)
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort();
+    } else {
+      externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+  }
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timeoutId));
 }
 
 function jsonWithTimeout<T>(response: Response, timeoutMs: number): Promise<T | null> {
@@ -448,7 +453,7 @@ export default function HomePage() {
     setInitError(false);
     setIsBoardLoading(true);
     retryCountRef.current = 0;
-    void fetchGames().then(() => {
+    void fetchGames().finally(() => {
       setIsBoardLoading(false);
     });
   }
