@@ -15,7 +15,7 @@ export async function createCheckout(
     gameId?: string;
     chatSessionId?: string;
   },
-): Promise<{ sessionId: string; amount: number; checkoutUrl: string }> {
+): Promise<{ sessionId: string; amount: number; checkoutUrl: string; accessToken?: string }> {
   const res = await fetch("/api/payments/create-checkout", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -25,7 +25,7 @@ export async function createCheckout(
   if (!res.ok) {
     throw new Error(payload.message || "Could not create checkout");
   }
-  return payload;
+  return payload as { sessionId: string; amount: number; checkoutUrl: string; accessToken?: string };
 }
 
 export async function pollCheckoutStatus(sessionId: string): Promise<CheckoutStatusResult> {

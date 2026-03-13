@@ -8,8 +8,9 @@ import {
   touchSession,
   getGames,
   getActiveSystemPrompt,
+  getMatchMarkdown,
 } from "@/lib/store";
-import { getOrCreateTodayPrediction, syncTodayGames } from "@/lib/daily-edge";
+import { syncTodayGames } from "@/lib/daily-edge";
 import { getEstDateKey } from "@/lib/time";
 import { parseBearerToken, verifyAccessToken } from "@/lib/token";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Game context could not be loaded" }, { status: 404 });
   }
 
-  const prediction = await getOrCreateTodayPrediction(dateKey);
+  const matchMarkdown = await getMatchMarkdown(session.gameId, dateKey);
 
   await addChatMessage(sessionId, "user", question);
   session.questionsUsed += 1;
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
   const answer = await generateMatchResponse({
     question,
     game,
-    predictionText: prediction.markdownContent,
+    matchMarkdown: matchMarkdown?.markdownContent || "",
     unlockedPrediction: Boolean(session.isPaid),
     systemPrompt: (await getActiveSystemPrompt()).content,
   });

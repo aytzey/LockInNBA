@@ -3,8 +3,10 @@ import { DEFAULT_SOCIAL_PROOF_TEXT, getSocialProofBanner } from "@/lib/store";
 
 export async function GET() {
   const banner = await getSocialProofBanner();
+  const messages = banner?.messages || DEFAULT_SOCIAL_PROOF_TEXT.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
   return NextResponse.json({
-    text: banner?.text || DEFAULT_SOCIAL_PROOF_TEXT,
+    text: messages[0] || DEFAULT_SOCIAL_PROOF_TEXT,
+    messages,
     isActive: true,
   });
 }

@@ -3,7 +3,7 @@ import { getOptionalEnv } from "./env";
 
 const DEFAULT_SYSTEM_PROMPT =
   "Sen LOCKIN'ın NBA analiz asistanısın. Veri odaklı ve net konuş. Sadece istatistiksel avantajları göster, kesin sonuç vaadi verme, bahis tavsiyesi olarak yorumlanmaması için dikkatli ol.";
-const SCHEMA_VERSION = 20260313;
+const SCHEMA_VERSION = 2026031302;
 
 declare global {
   var __lockinDbPool: Pool | undefined;
@@ -71,21 +71,67 @@ async function runSchemaSetup(): Promise<void> {
     CREATE TABLE IF NOT EXISTS social_proof_banner (
       id TEXT PRIMARY KEY,
       text TEXT NOT NULL DEFAULT '',
+      messages_json JSONB NOT NULL DEFAULT '[]'::jsonb,
       is_active BOOLEAN NOT NULL DEFAULT FALSE,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
+  await pool.query(`ALTER TABLE social_proof_banner ADD COLUMN IF NOT EXISTS messages_json JSONB NOT NULL DEFAULT '[]'::jsonb`);
+  await pool.query(`
+    UPDATE social_proof_banner
+    SET messages_json = CASE
+      WHEN jsonb_array_length(messages_json) > 0 THEN messages_json
+      WHEN btrim(text) <> '' THEN jsonb_build_array(text)
+      ELSE '[]'::jsonb
+    END
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS site_copy (
       id TEXT PRIMARY KEY,
-      daily_cta_text TEXT NOT NULL DEFAULT 'Unlock Tonight''s Edge — $5',
+      daily_cta_text TEXT NOT NULL DEFAULT 'Unlock Tonight''s Edge',
+      daily_price_subtext TEXT NOT NULL DEFAULT '$5 one-time pass',
       no_edge_message TEXT NOT NULL DEFAULT 'We passed on 90% of this week''s games. We only bet when the math screams.',
       header_right_text TEXT NOT NULL DEFAULT '',
+      meta_description TEXT NOT NULL DEFAULT 'LOCKIN is a premium AI sports analytics platform delivering nightly NBA moneyline analysis and per-game statistical insights.',
       footer_disclaimer TEXT NOT NULL DEFAULT 'For entertainment purposes only. LOCKIN does not accept wagers or guarantee outcomes. If you or someone you know has a gambling problem, call 1-800-GAMBLER.',
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+
+  await pool.query(`ALTER TABLE site_copy ADD COLUMN IF NOT EXISTS daily_price_subtext TEXT NOT NULL DEFAULT '$5 one-time pass'`);
+  await pool.query(`ALTER TABLE site_copy ADD COLUMN IF NOT EXISTS meta_description TEXT NOT NULL DEFAULT 'LOCKIN is a premium AI sports analytics platform delivering nightly NBA moneyline analysis and per-game statistical insights.'`);
+  await pool.query(`
+    UPDATE site_copy
+    SET daily_cta_text = 'Unlock Tonight''s Edge'
+    WHERE daily_cta_text = 'Unlock Tonight''s Edge — $5'
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS promo_banner (
+      id TEXT PRIMARY KEY,
+      is_active BOOLEAN NOT NULL DEFAULT FALSE,
+      banner_text TEXT NOT NULL DEFAULT '',
+      end_datetime TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS match_markdowns (
+      id TEXT PRIMARY KEY,
+      game_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      markdown_content TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_match_markdowns_game_date ON match_markdowns (game_id, date)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_match_markdowns_date ON match_markdowns (date)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS system_prompts (
@@ -230,8 +276,10 @@ async function runSchemaSetup(): Promise<void> {
     "predictions",
     "social_proof_banner",
     "site_copy",
+    "promo_banner",
     "system_prompts",
     "games",
+    "match_markdowns",
     "chat_sessions",
     "chat_messages",
     "checkout_sessions",

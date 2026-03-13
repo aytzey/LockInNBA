@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateTodayPrediction } from "@/lib/daily-edge";
-import { createCheckoutSession } from "@/lib/store";
+import { completeCheckout, createCheckoutSession, getActivePromoBanner } from "@/lib/store";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isLemonSqueezyConfigured, createLemonCheckout } from "@/lib/lemonsqueezy";
+import { issueAccessToken } from "@/lib/token";
+import { getEstDateKey } from "@/lib/time";
 
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") || "unknown";
@@ -35,12 +37,49 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "No edge day" }, { status: 403 });
   }
 
+  const activePromo = await getActivePromoBanner();
+  const isFreePromoFlow = Boolean(activePromo && (type === "daily_pick" || type === "match_chat"));
+
+  if (isFreePromoFlow && !email) {
+    return NextResponse.json({ message: "Email is required during free access week" }, { status: 400 });
+  }
+
   const result = await createCheckoutSession({
     email: email || undefined,
     type,
     gameId,
     chatSessionId,
   });
+
+  if (isFreePromoFlow) {
+    const payment = await completeCheckout(result.id, `promo_${Date.now()}`, email);
+    if (!payment) {
+      return NextResponse.json({ message: "Could not grant promo access" }, { status: 500 });
+    }
+
+    const accessToken =
+      payment.type === "daily_pick"
+        ? issueAccessToken({
+            type: "daily",
+            sub: payment.stripeCustomerEmail,
+            date: getEstDateKey(new Date(payment.grantedAt)),
+          })
+        : issueAccessToken({
+            type: "chat",
+            sub: payment.stripeCustomerEmail,
+            date: getEstDateKey(new Date(payment.grantedAt)),
+            sessionId: payment.metadata.chatSessionId,
+            gameId: payment.metadata.gameId,
+          });
+
+    return NextResponse.json({
+      sessionId: result.id,
+      amount: 0,
+      currency: "USD",
+      checkoutUrl: "__free__",
+      accessToken,
+    });
+  }
 
   if (isLemonSqueezyConfigured()) {
     const origin = request.headers.get("origin") || request.nextUrl.origin;

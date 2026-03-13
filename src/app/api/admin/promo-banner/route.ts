@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminToken } from "@/lib/admin";
-import { getSiteCopy, setSiteCopy } from "@/lib/store";
+import { getPromoBanner, setPromoBanner } from "@/lib/store";
 
 function isAuthorized(request: NextRequest): boolean {
   const token = request.headers.get("authorization")?.replace("Bearer ", "");
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  return NextResponse.json({ siteCopy: await getSiteCopy() });
+  return NextResponse.json({ promoBanner: await getPromoBanner() });
 }
 
 export async function PUT(request: NextRequest) {
@@ -21,14 +21,11 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => null);
-  const siteCopy = await setSiteCopy({
-    dailyCtaText: body?.dailyCtaText,
-    dailyPriceSubtext: body?.dailyPriceSubtext,
-    noEdgeMessage: body?.noEdgeMessage,
-    headerRightText: body?.headerRightText,
-    metaDescription: body?.metaDescription,
-    footerDisclaimer: body?.footerDisclaimer,
+  const promoBanner = await setPromoBanner({
+    isActive: Boolean(body?.isActive),
+    bannerText: (body?.bannerText || "").toString(),
+    endDatetime: (body?.endDatetime || "").toString(),
   });
 
-  return NextResponse.json({ siteCopy });
+  return NextResponse.json({ promoBanner });
 }

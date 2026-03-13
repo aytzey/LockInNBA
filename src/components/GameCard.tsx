@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import type { Game } from "./types";
 import { formatEstTime, moneyline } from "./utils";
@@ -6,6 +7,7 @@ import { formatEstTime, moneyline } from "./utils";
 interface GameCardProps {
   game: Game;
   onOpenChat: (game: Game) => void;
+  promoActive?: boolean;
 }
 
 function statusBadge(game: Game): { label: string; className: string } {
@@ -26,9 +28,9 @@ function statusBadge(game: Game): { label: string; className: string } {
   return { label: "UPCOMING", className: "game-card__badge game-card__badge--upcoming" };
 }
 
-export default function GameCard({ game, onOpenChat }: GameCardProps) {
+export default function GameCard({ game, onOpenChat, promoActive = false }: GameCardProps) {
   const badge = statusBadge(game);
-  const showScore = game.awayScore !== null && game.homeScore !== null;
+  const showScore = game.status !== "upcoming" && game.awayScore !== null && game.homeScore !== null;
 
   return (
     <button
@@ -88,11 +90,8 @@ export default function GameCard({ game, onOpenChat }: GameCardProps) {
         </div>
       ) : null}
 
-      <div className="mt-5 flex items-center justify-between border-t border-[color:var(--line)] pt-4">
-        <span className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--silver-gray)]">
-          Matchup room
-        </span>
-        <span className="game-card__cta">Ask AI about this game — $2</span>
+      <div className="mt-5 flex items-center justify-end border-t border-[color:var(--line)] pt-4">
+        <span className="game-card__cta">{promoActive ? "Ask AI Free" : "Ask AI"}</span>
       </div>
     </button>
   );

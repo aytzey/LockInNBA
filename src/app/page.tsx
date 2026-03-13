@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import Header from "@/components/Header";
+import PromoBanner from "@/components/PromoBanner";
 import SocialProofBanner from "@/components/SocialProofBanner";
 import TonightsEdge from "@/components/TonightsEdge";
 import GameCard from "@/components/GameCard";
@@ -10,71 +11,62 @@ import ChatModal from "@/components/ChatModal";
 import RestoreAccess from "@/components/RestoreAccess";
 import ShareCard from "@/components/ShareCard";
 import { GameListSkeleton } from "@/components/LoadingSkeleton";
-import type { Game, TodayPrediction, ChatMessage, SiteCopy } from "@/components/types";
+import type { Game, TodayPrediction, ChatMessage, SiteCopy, PromoBanner as PromoBannerState } from "@/components/types";
 import { CHAT_SESSION_RESTORE_PREFIX, CHAT_TOKEN_PREFIX, DAILY_TOKEN_KEY } from "@/components/utils";
 import { pollCheckoutStatus } from "@/components/api";
 
 const LIVE_BOARD_POLL_MS = 20_000;
-const ACTIVE_SLATE_POLL_MS = 90_000;
-const QUIET_SLATE_POLL_MS = 5 * 60_000;
-const DEFAULT_SOCIAL_PROOF = "This Week: 5-0 (100%) | +19.3u ROI";
+const ACTIVE_SLATE_POLL_MS = 5 * 60_000;
+const QUIET_SLATE_POLL_MS = 15 * 60_000;
+const DEFAULT_SOCIAL_PROOF_MESSAGES = [
+  "This Week: 5-0 (100%)",
+  "+19.3u ROI",
+  "We passed on 90% of this week's board",
+];
 const DEFAULT_SITE_COPY: SiteCopy = {
-  dailyCtaText: "Unlock Tonight's Edge — $5",
+  dailyCtaText: "Unlock Tonight's Edge",
+  dailyPriceSubtext: "$5 one-time pass",
   noEdgeMessage: "We passed on 90% of this week's games. We only bet when the math screams.",
   headerRightText: "",
+  metaDescription: "LOCKIN is a premium AI sports analytics platform delivering nightly NBA moneyline analysis and per-game statistical insights.",
   footerDisclaimer:
     "For entertainment purposes only. LOCKIN does not accept wagers or guarantee outcomes. If you or someone you know has a gambling problem, call 1-800-GAMBLER.",
 };
 
 function splitTeaser(text: string): { headline: string; body: string } {
   const lines = text.split("\n").filter((line) => line.trim().length > 0);
-  const headline = lines.slice(0, 2).join(" ") || "Our engine went 5-0 this week. Tonight's edge is ready.";
+  const headline = lines.slice(0, 2).join(" ") || "One game on tonight's slate just lit up every signal.";
   const body = lines.slice(2).join("\n");
   return { headline, body };
 }
 
-function buildSocialProof(baseText: string, isNoEdgeDay: boolean): string {
-  if (!isNoEdgeDay) {
-    return baseText;
+function normalizeSocialProofMessages(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? "").trim()).filter(Boolean);
   }
 
-  if (baseText.startsWith("Today: No Edge")) {
-    return baseText;
+  if (typeof value === "string") {
+    return value
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean);
   }
 
-  return `Today: No Edge — Protecting Your Bankroll | ${baseText}`;
+  return [];
 }
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.08, delayChildren: 0.08 },
-  },
-};
+function buildSocialProofMessages(baseMessages: string[], isNoEdgeDay: boolean): string[] {
+  const normalized = baseMessages.filter(Boolean);
+  if (!isNoEdgeDay) {
+    return normalized;
+  }
 
-const itemVariants = {
-  hidden: { opacity: 0, y: 14 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.38, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
-  },
-};
+  if (normalized.some((message) => message.startsWith("Today: No Edge"))) {
+    return normalized;
+  }
 
-const gameCardVariants = {
-  hidden: { opacity: 0, y: 10, scale: 0.98 },
-  visible: (index: number) => ({
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      duration: 0.32,
-      delay: index * 0.05,
-      ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
-    },
-  }),
-};
+  return ["Today: No Edge — Protecting Your Bankroll", ...normalized];
+}
 
 export default function HomePage() {
   const shareCardRef = useRef<HTMLDivElement>(null);
@@ -83,8 +75,9 @@ export default function HomePage() {
   const [isBoardLoading, setIsBoardLoading] = useState(true);
   const [isPredictionLoading, setIsPredictionLoading] = useState(true);
   const [todayPrediction, setTodayPrediction] = useState<TodayPrediction | null>(null);
-  const [socialProofBase, setSocialProofBase] = useState(DEFAULT_SOCIAL_PROOF);
+  const [socialProofMessages, setSocialProofMessages] = useState(DEFAULT_SOCIAL_PROOF_MESSAGES);
   const [siteCopy, setSiteCopy] = useState<SiteCopy>(DEFAULT_SITE_COPY);
+  const [promoBanner, setPromoBanner] = useState<PromoBannerState | null>(null);
   const [games, setGames] = useState<Game[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
 
@@ -98,10 +91,13 @@ export default function HomePage() {
   const [shareMode, setShareMode] = useState<"daily" | "chat">("daily");
 
   const preview = splitTeaser(todayPrediction?.teaserText || "");
-  const effectiveSocialProof = useMemo(
-    () => buildSocialProof(socialProofBase, Boolean(todayPrediction?.isNoEdgeDay)),
-    [socialProofBase, todayPrediction?.isNoEdgeDay],
+  const effectiveSocialProofMessages = useMemo(
+    () => buildSocialProofMessages(socialProofMessages, Boolean(todayPrediction?.isNoEdgeDay)),
+    [socialProofMessages, todayPrediction?.isNoEdgeDay],
   );
+  const isPromoActive = Boolean(promoBanner);
+  const effectiveDailyCtaText = isPromoActive ? "Unlock Free" : siteCopy.dailyCtaText;
+  const effectiveDailyPriceSubtext = isPromoActive ? "Launch week access. Email required." : siteCopy.dailyPriceSubtext;
 
   const fetchGames = useCallback(async () => {
     try {
@@ -147,32 +143,43 @@ export default function HomePage() {
       let initialGames: Game[] = [];
 
       const fallbackInit = async () => {
-        const [gamesBody, predictionResponse, socialProofResponse, siteCopyResponse] = await Promise.all([
+        const [gamesBody, predictionResponse, socialProofResponse, siteCopyResponse, promoBannerResponse] = await Promise.all([
           fetchGames(),
           fetch("/api/predictions/today").catch(() => null),
           fetch("/api/social-proof").catch(() => null),
           fetch("/api/site-copy").catch(() => null),
+          fetch("/api/promo-banner").catch(() => null),
         ]);
 
         initialGames = (gamesBody?.games as Game[] | undefined) || [];
         setIsBoardLoading(false);
 
-        const [predictionBody, socialProofBody, siteCopyBody] = await Promise.all([
+        const [predictionBody, socialProofBody, siteCopyBody, promoBannerBody] = await Promise.all([
           predictionResponse?.ok ? predictionResponse.json().catch(() => null) : Promise.resolve(null),
           socialProofResponse?.ok ? socialProofResponse.json().catch(() => null) : Promise.resolve(null),
           siteCopyResponse?.ok ? siteCopyResponse.json().catch(() => null) : Promise.resolve(null),
+          promoBannerResponse?.ok ? promoBannerResponse.json().catch(() => null) : Promise.resolve(null),
         ]);
 
         if (predictionBody) {
           setTodayPrediction(predictionBody);
         }
-        setSocialProofBase(socialProofBody?.text || DEFAULT_SOCIAL_PROOF);
+        setSocialProofMessages(
+          normalizeSocialProofMessages(socialProofBody?.messages).length > 0
+            ? normalizeSocialProofMessages(socialProofBody?.messages)
+            : normalizeSocialProofMessages(socialProofBody?.text).length > 0
+              ? normalizeSocialProofMessages(socialProofBody?.text)
+              : DEFAULT_SOCIAL_PROOF_MESSAGES,
+        );
         setSiteCopy({
           dailyCtaText: siteCopyBody?.dailyCtaText || DEFAULT_SITE_COPY.dailyCtaText,
+          dailyPriceSubtext: siteCopyBody?.dailyPriceSubtext || DEFAULT_SITE_COPY.dailyPriceSubtext,
           noEdgeMessage: siteCopyBody?.noEdgeMessage || DEFAULT_SITE_COPY.noEdgeMessage,
           headerRightText: siteCopyBody?.headerRightText || DEFAULT_SITE_COPY.headerRightText,
+          metaDescription: siteCopyBody?.metaDescription || DEFAULT_SITE_COPY.metaDescription,
           footerDisclaimer: siteCopyBody?.footerDisclaimer || DEFAULT_SITE_COPY.footerDisclaimer,
         });
+        setPromoBanner(promoBannerBody?.promoBanner || null);
         setIsPredictionLoading(false);
       };
 
@@ -189,13 +196,22 @@ export default function HomePage() {
             setGames(initialGames);
             setLastUpdatedAt(bootstrap.updatedAt || new Date().toISOString());
             setTodayPrediction(bootstrap.prediction || null);
-            setSocialProofBase(bootstrap.socialProof?.text || DEFAULT_SOCIAL_PROOF);
+            setSocialProofMessages(
+              normalizeSocialProofMessages(bootstrap.socialProof?.messages).length > 0
+                ? normalizeSocialProofMessages(bootstrap.socialProof?.messages)
+                : normalizeSocialProofMessages(bootstrap.socialProof?.text).length > 0
+                  ? normalizeSocialProofMessages(bootstrap.socialProof?.text)
+                  : DEFAULT_SOCIAL_PROOF_MESSAGES,
+            );
             setSiteCopy({
               dailyCtaText: bootstrap.siteCopy?.dailyCtaText || DEFAULT_SITE_COPY.dailyCtaText,
+              dailyPriceSubtext: bootstrap.siteCopy?.dailyPriceSubtext || DEFAULT_SITE_COPY.dailyPriceSubtext,
               noEdgeMessage: bootstrap.siteCopy?.noEdgeMessage || DEFAULT_SITE_COPY.noEdgeMessage,
               headerRightText: bootstrap.siteCopy?.headerRightText || DEFAULT_SITE_COPY.headerRightText,
+              metaDescription: bootstrap.siteCopy?.metaDescription || DEFAULT_SITE_COPY.metaDescription,
               footerDisclaimer: bootstrap.siteCopy?.footerDisclaimer || DEFAULT_SITE_COPY.footerDisclaimer,
             });
+            setPromoBanner(bootstrap.promoBanner || null);
             setIsPredictionLoading(false);
             setIsBoardLoading(false);
           }
@@ -359,54 +375,43 @@ export default function HomePage() {
       }).format(new Date(lastUpdatedAt))
     : "";
 
-  function renderGameSection(sectionGames: Game[], startIndex: number) {
-    return sectionGames.map((game, index) => (
-      <motion.div
+  function renderGameSection(sectionGames: Game[]) {
+    return sectionGames.map((game) => (
+      <GameCard
         key={game.id}
-        custom={startIndex + index}
-        variants={gameCardVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        <GameCard game={game} onOpenChat={handleOpenChat} />
-      </motion.div>
+        game={game}
+        onOpenChat={handleOpenChat}
+        promoActive={isPromoActive}
+      />
     ));
   }
 
   return (
     <main className="noise-overlay min-h-screen">
       <div className="aurora-bg" />
+      <PromoBanner promoBanner={promoBanner} />
 
-      <motion.div
-        className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col gap-6 px-4 py-6 pb-16 md:gap-8 md:px-8 md:py-8"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        <motion.div variants={itemVariants}>
-          <Header note={siteCopy.headerRightText} />
-        </motion.div>
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col gap-6 px-4 py-6 pb-16 md:gap-8 md:px-8 md:py-8">
+        <Header note={siteCopy.headerRightText} />
 
-        <motion.div variants={itemVariants}>
-          <SocialProofBanner text={effectiveSocialProof} />
-        </motion.div>
+        <SocialProofBanner messages={effectiveSocialProofMessages} />
 
-        <motion.div variants={itemVariants}>
-          <TonightsEdge
-            prediction={todayPrediction}
-            isLoading={isPredictionLoading && !dailyUnlocked}
-            dailyUnlocked={dailyUnlocked}
-            dailyMarkdown={dailyMarkdown}
-            onUnlock={unlockDailyPrediction}
-            onScrollToGames={() => gameSectionRef.current?.scrollIntoView({ behavior: "smooth" })}
-            onShare={() => void handleShare("daily")}
-            isShareBusy={isShareBusy}
-            ctaText={siteCopy.dailyCtaText}
-            noEdgeMessage={siteCopy.noEdgeMessage}
-          />
-        </motion.div>
+        <TonightsEdge
+          prediction={todayPrediction}
+          isLoading={isPredictionLoading && !dailyUnlocked}
+          dailyUnlocked={dailyUnlocked}
+          dailyMarkdown={dailyMarkdown}
+          onUnlock={unlockDailyPrediction}
+          onScrollToGames={() => gameSectionRef.current?.scrollIntoView({ behavior: "smooth" })}
+          onShare={() => void handleShare("daily")}
+          isShareBusy={isShareBusy}
+          ctaText={effectiveDailyCtaText}
+          priceSubtext={effectiveDailyPriceSubtext}
+          noEdgeMessage={siteCopy.noEdgeMessage}
+          isPromoActive={isPromoActive}
+        />
 
-        <motion.section ref={gameSectionRef} className="space-y-5 md:space-y-6" variants={itemVariants}>
+        <section ref={gameSectionRef} className="space-y-5 md:space-y-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="space-y-2">
               <h2 className="heading text-[1.6rem] text-[color:var(--pure-white)] md:text-[1.9rem]">
@@ -437,8 +442,8 @@ export default function HomePage() {
                     <span className="live-dot" />
                     LIVE
                   </div>
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    {renderGameSection(liveGames, 0)}
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    {renderGameSection(liveGames)}
                   </div>
                 </div>
               ) : null}
@@ -446,8 +451,8 @@ export default function HomePage() {
               {upcomingGames.length > 0 ? (
                 <div className="space-y-4">
                   <div className="board-group-label">UPCOMING</div>
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    {renderGameSection(upcomingGames, liveGames.length)}
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    {renderGameSection(upcomingGames)}
                   </div>
                 </div>
               ) : null}
@@ -455,23 +460,22 @@ export default function HomePage() {
               {finalGames.length > 0 ? (
                 <div className="space-y-4">
                   <div className="board-group-label">FINAL</div>
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    {renderGameSection(finalGames, liveGames.length + upcomingGames.length)}
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    {renderGameSection(finalGames)}
                   </div>
                 </div>
               ) : null}
             </div>
           )}
-        </motion.section>
+        </section>
 
-        <motion.div variants={itemVariants}>
-          <RestoreAccess onRestore={unlockDailyPrediction} footerDisclaimer={siteCopy.footerDisclaimer} />
-        </motion.div>
+        <RestoreAccess onRestore={unlockDailyPrediction} footerDisclaimer={siteCopy.footerDisclaimer} />
 
         <AnimatePresence>
           {selectedGame ? (
             <ChatModal
               game={selectedGame}
+              promoActive={isPromoActive}
               onClose={handleCloseChat}
               onShareRequest={() => void handleShare("chat")}
               isShareBusy={isShareBusy}
@@ -488,7 +492,7 @@ export default function HomePage() {
           selectedGame={selectedGame}
           chatMessages={chatMessages}
         />
-      </motion.div>
+      </div>
     </main>
   );
 }

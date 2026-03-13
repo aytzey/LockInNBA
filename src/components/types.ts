@@ -34,9 +34,17 @@ export type TodayPrediction = {
 
 export type SiteCopy = {
   dailyCtaText: string;
+  dailyPriceSubtext: string;
   noEdgeMessage: string;
   headerRightText: string;
+  metaDescription: string;
   footerDisclaimer: string;
+};
+
+export type PromoBanner = {
+  isActive: boolean;
+  bannerText: string;
+  endDatetime: string;
 };
 
 export type ChatMessage = {

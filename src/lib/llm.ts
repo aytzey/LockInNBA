@@ -22,7 +22,7 @@ type OpenRouterContent = string | Array<{ type?: string; text?: string }>;
 interface MatchResponseInput {
   question: string;
   game: Game;
-  predictionText: string;
+  matchMarkdown: string;
   unlockedPrediction: boolean;
   systemPrompt: string;
 }
@@ -119,6 +119,9 @@ function buildHeuristicMatchResponse(input: MatchResponseInput): string {
   const accessContext = input.unlockedPrediction
     ? "The user already has paid access, so give a direct matchup answer."
     : "Keep the answer grounded and standalone to this matchup.";
+  const engineContext = input.matchMarkdown.trim()
+    ? "A game-specific engine read is available and should anchor the answer."
+    : "No game-specific engine read is available, so stay limited to the live matchup data only.";
 
   return [
     "## Read",
@@ -129,7 +132,7 @@ function buildHeuristicMatchResponse(input: MatchResponseInput): string {
     "",
     "## Signal",
     "",
-    `${accessContext} Based on the current board, the cleaner side is **${favoriteTeam} moneyline**, but only at standard stake sizing.`,
+    `${accessContext} ${engineContext} Based on the current board, the cleaner side is **${favoriteTeam} moneyline**, but only at standard stake sizing.`,
     "",
     "## Risk",
     "",
@@ -139,6 +142,7 @@ function buildHeuristicMatchResponse(input: MatchResponseInput): string {
 }
 
 export async function generateMatchResponse(input: MatchResponseInput): Promise<string> {
+  const hasEngineRead = input.matchMarkdown.trim().length > 0;
   const systemMessage = [
     input.systemPrompt.trim(),
     "",
@@ -149,6 +153,9 @@ export async function generateMatchResponse(input: MatchResponseInput): Promise<
     "Do not mention or compare any other matchup on the slate.",
     "Respond in tight markdown with the sections `## Read`, `## Signal`, and `## Risk`.",
     "Keep the answer under 220 words and make the final signal actionable but cautious.",
+    hasEngineRead
+      ? "A game-specific engine markdown is attached below. Treat it as the only engine note you can use."
+      : "No game-specific engine markdown is available. If relevant, briefly note that the engine has not published a detailed read for this matchup.",
   ].join("\n");
 
   const userMessage = [
@@ -156,6 +163,10 @@ export async function generateMatchResponse(input: MatchResponseInput): Promise<
     "",
     "Matchup context:",
     buildGameContext(input.game),
+    "",
+    hasEngineRead
+      ? `Game-specific engine markdown:\n${input.matchMarkdown.trim()}`
+      : "Game-specific engine markdown: unavailable.",
     "",
     `Paid daily card active: ${input.unlockedPrediction ? "yes" : "no"}`,
     "Important: answer only from the matchup context above.",

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import MarkdownContent from "@/components/MarkdownContent";
+import SocialProofBanner from "@/components/SocialProofBanner";
 
 type AdminPrediction = {
   id: string;
@@ -23,18 +24,50 @@ type SystemPrompt = {
 
 type SiteCopy = {
   dailyCtaText: string;
+  dailyPriceSubtext: string;
   noEdgeMessage: string;
   headerRightText: string;
+  metaDescription: string;
   footerDisclaimer: string;
+};
+
+type PromoBanner = {
+  isActive: boolean;
+  bannerText: string;
+  endDatetime: string;
+};
+
+type AdminGame = {
+  id: string;
+  awayTeam: string;
+  homeTeam: string;
+  gameTimeEST: string;
+  status: "upcoming" | "live" | "final";
+};
+
+type MatchMarkdown = {
+  id: string;
+  gameId: string;
+  date: string;
+  markdownContent: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 const ADMIN_TOKEN_KEY = "lockin_admin_token";
 const DEFAULT_SITE_COPY: SiteCopy = {
-  dailyCtaText: "Unlock Tonight's Edge — $5",
+  dailyCtaText: "Unlock Tonight's Edge",
+  dailyPriceSubtext: "$5 one-time pass",
   noEdgeMessage: "We passed on 90% of this week's games. We only bet when the math screams.",
   headerRightText: "",
+  metaDescription: "LOCKIN is a premium AI sports analytics platform delivering nightly NBA moneyline analysis and per-game statistical insights.",
   footerDisclaimer:
     "For entertainment purposes only. LOCKIN does not accept wagers or guarantee outcomes. If you or someone you know has a gambling problem, call 1-800-GAMBLER.",
+};
+const DEFAULT_PROMO_BANNER: PromoBanner = {
+  isActive: false,
+  bannerText: "LAUNCH WEEK: 100% FREE ACCESS — Unlock every pick & AI chat free for 7 days.",
+  endDatetime: "",
 };
 
 function estDateInputValue(): string {
@@ -43,12 +76,55 @@ function estDateInputValue(): string {
   });
 }
 
+function toDateTimeLocalValue(value: string): string {
+  if (!value) {
+    return "";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  const year = parsed.getFullYear();
+  const month = `${parsed.getMonth() + 1}`.padStart(2, "0");
+  const day = `${parsed.getDate()}`.padStart(2, "0");
+  const hours = `${parsed.getHours()}`.padStart(2, "0");
+  const minutes = `${parsed.getMinutes()}`.padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 function addAuthHeader(token: string | null): Record<string, string> {
   const headers: Record<string, string> = {};
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
   return headers;
+}
+
+function parseMessageInput(value: string): string[] {
+  return value
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatGameLabel(game: AdminGame): string {
+  return `${game.awayTeam} @ ${game.homeTeam}`;
+}
+
+function formatGameTime(gameTimeEST: string): string {
+  const parsed = new Date(gameTimeEST);
+  if (Number.isNaN(parsed.getTime())) {
+    return "TBD";
+  }
+
+  return parsed.toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 export default function AdminSecurePage() {
@@ -67,60 +143,128 @@ export default function AdminSecurePage() {
   const [predictionMessage, setPredictionMessage] = useState("");
   const [predictionSaving, setPredictionSaving] = useState(false);
 
+  const [matchMarkdownGames, setMatchMarkdownGames] = useState<AdminGame[]>([]);
+  const [matchMarkdowns, setMatchMarkdowns] = useState<Record<string, string>>({});
+  const [matchMarkdownLoading, setMatchMarkdownLoading] = useState(false);
+  const [matchMarkdownSaving, setMatchMarkdownSaving] = useState(false);
+  const [matchMarkdownMessage, setMatchMarkdownMessage] = useState("");
+
   const [socialProofText, setSocialProofText] = useState("");
   const [socialProofMessage, setSocialProofMessage] = useState("");
 
   const [siteCopy, setSiteCopy] = useState<SiteCopy>(DEFAULT_SITE_COPY);
   const [siteCopyMessage, setSiteCopyMessage] = useState("");
 
+  const [promoBanner, setPromoBanner] = useState<PromoBanner>(DEFAULT_PROMO_BANNER);
+  const [promoMessage, setPromoMessage] = useState("");
+
   const [activePrompt, setActivePrompt] = useState("");
   const [promptHistory, setPromptHistory] = useState<SystemPrompt[]>([]);
   const [promptText, setPromptText] = useState("");
   const [promptMessage, setPromptMessage] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"predictions" | "social" | "copy" | "prompt">("predictions");
+  const [activeTab, setActiveTab] = useState<"predictions" | "social" | "copy" | "promo" | "prompt">("predictions");
 
-  async function bootstrapAdmin(tokenValue: string | null) {
-    if (!tokenValue) return;
+  const socialProofMessages = useMemo(() => parseMessageInput(socialProofText), [socialProofText]);
+
+  const clearStoredAuth = useCallback(() => {
+    window.localStorage.removeItem(ADMIN_TOKEN_KEY);
+    setToken(null);
+  }, []);
+
+  const loadMatchMarkdowns = useCallback(async (tokenValue: string, dateValue: string) => {
+    setMatchMarkdownLoading(true);
+    setMatchMarkdownMessage("");
 
     try {
-      const [predictionsResponse, proofResponse, promptResponse, siteCopyResponse] = await Promise.all([
-        fetch("/api/admin/predictions", { headers: addAuthHeader(tokenValue) }),
-        fetch("/api/admin/social-proof-banner", { headers: addAuthHeader(tokenValue) }),
-        fetch("/api/admin/system-prompt", { headers: addAuthHeader(tokenValue) }),
-        fetch("/api/admin/site-copy", { headers: addAuthHeader(tokenValue) }),
-      ]);
+      const response = await fetch(`/api/admin/match-markdowns?date=${dateValue}`, {
+        headers: addAuthHeader(tokenValue),
+      });
 
-      if ([predictionsResponse, proofResponse, promptResponse, siteCopyResponse].some((response) => response.status === 401)) {
-        window.localStorage.removeItem(ADMIN_TOKEN_KEY);
-        setToken(null);
+      if (response.status === 401) {
+        clearStoredAuth();
         setChecking(false);
         return;
       }
 
-      const [predictionsBody, proofBody, promptBody, siteCopyBody] = await Promise.all([
+      const body = await response.json();
+      if (!response.ok) {
+        setMatchMarkdownMessage(body.message || "Could not load match markdowns.");
+        return;
+      }
+
+      const nextGames = Array.isArray(body.games) ? (body.games as AdminGame[]) : [];
+      const nextMarkdowns = Array.isArray(body.matchMarkdowns)
+        ? (body.matchMarkdowns as MatchMarkdown[]).reduce<Record<string, string>>((acc, entry) => {
+            acc[entry.gameId] = entry.markdownContent || "";
+            return acc;
+          }, {})
+        : {};
+
+      setMatchMarkdownGames(nextGames);
+      setMatchMarkdowns(nextMarkdowns);
+    } catch {
+      setMatchMarkdownMessage("Could not load match markdowns.");
+    } finally {
+      setMatchMarkdownLoading(false);
+    }
+  }, [clearStoredAuth]);
+
+  const bootstrapAdmin = useCallback(async (tokenValue: string | null) => {
+    if (!tokenValue) {
+      return;
+    }
+
+    try {
+      const [predictionsResponse, proofResponse, promptResponse, siteCopyResponse, promoResponse] = await Promise.all([
+        fetch("/api/admin/predictions", { headers: addAuthHeader(tokenValue) }),
+        fetch("/api/admin/social-proof-banner", { headers: addAuthHeader(tokenValue) }),
+        fetch("/api/admin/system-prompt", { headers: addAuthHeader(tokenValue) }),
+        fetch("/api/admin/site-copy", { headers: addAuthHeader(tokenValue) }),
+        fetch("/api/admin/promo-banner", { headers: addAuthHeader(tokenValue) }),
+      ]);
+
+      if ([predictionsResponse, proofResponse, promptResponse, siteCopyResponse, promoResponse].some((response) => response.status === 401)) {
+        clearStoredAuth();
+        setChecking(false);
+        return;
+      }
+
+      const [predictionsBody, proofBody, promptBody, siteCopyBody, promoBody] = await Promise.all([
         predictionsResponse.json(),
         proofResponse.json(),
         promptResponse.json(),
         siteCopyResponse.json(),
+        promoResponse.json(),
       ]);
 
       setPredictions(predictionsBody.predictions || []);
-      setSocialProofText(proofBody.banner || "");
+      setSocialProofText(
+        Array.isArray(proofBody.messages) && proofBody.messages.length > 0
+          ? proofBody.messages.join("\n")
+          : proofBody.banner || "",
+      );
       setActivePrompt(promptBody.active?.content || "");
       setPromptHistory(promptBody.history || []);
       setSiteCopy({
         dailyCtaText: siteCopyBody.siteCopy?.dailyCtaText || DEFAULT_SITE_COPY.dailyCtaText,
+        dailyPriceSubtext: siteCopyBody.siteCopy?.dailyPriceSubtext || DEFAULT_SITE_COPY.dailyPriceSubtext,
         noEdgeMessage: siteCopyBody.siteCopy?.noEdgeMessage || DEFAULT_SITE_COPY.noEdgeMessage,
         headerRightText: siteCopyBody.siteCopy?.headerRightText || DEFAULT_SITE_COPY.headerRightText,
+        metaDescription: siteCopyBody.siteCopy?.metaDescription || DEFAULT_SITE_COPY.metaDescription,
         footerDisclaimer: siteCopyBody.siteCopy?.footerDisclaimer || DEFAULT_SITE_COPY.footerDisclaimer,
+      });
+      setPromoBanner({
+        isActive: promoBody.promoBanner?.isActive ?? DEFAULT_PROMO_BANNER.isActive,
+        bannerText: promoBody.promoBanner?.bannerText || DEFAULT_PROMO_BANNER.bannerText,
+        endDatetime: promoBody.promoBanner?.endDatetime || "",
       });
     } catch {
       setPredictionMessage("Failed to load admin data.");
     } finally {
       setChecking(false);
     }
-  }
+  }, [clearStoredAuth]);
 
   useEffect(() => {
     const savedToken = window.localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -131,7 +275,15 @@ export default function AdminSecurePage() {
     }
 
     setChecking(false);
-  }, []);
+  }, [bootstrapAdmin]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    void loadMatchMarkdowns(token, predictionDate);
+  }, [loadMatchMarkdowns, predictionDate, token]);
 
   function selectPrediction(prediction: AdminPrediction) {
     setSelectedPredictionId(prediction.id);
@@ -251,6 +403,49 @@ export default function AdminSecurePage() {
     }
   }
 
+  async function saveMatchMarkdownEntries() {
+    if (!token) return;
+
+    setMatchMarkdownSaving(true);
+    setMatchMarkdownMessage("");
+
+    try {
+      const res = await fetch("/api/admin/match-markdowns", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...addAuthHeader(token),
+        },
+        body: JSON.stringify({
+          date: predictionDate,
+          entries: matchMarkdownGames.map((game) => ({
+            gameId: game.id,
+            markdownContent: matchMarkdowns[game.id] || "",
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMatchMarkdownMessage(data.message || "Save failed.");
+        return;
+      }
+
+      const nextMarkdowns = Array.isArray(data.matchMarkdowns)
+        ? (data.matchMarkdowns as MatchMarkdown[]).reduce<Record<string, string>>((acc, entry) => {
+            acc[entry.gameId] = entry.markdownContent || "";
+            return acc;
+          }, {})
+        : {};
+
+      setMatchMarkdowns(nextMarkdowns);
+      setMatchMarkdownMessage("Match markdowns saved.");
+    } catch {
+      setMatchMarkdownMessage("Save failed due to network error.");
+    } finally {
+      setMatchMarkdownSaving(false);
+    }
+  }
+
   async function saveSocialProof() {
     if (!token) return;
 
@@ -262,7 +457,7 @@ export default function AdminSecurePage() {
           "Content-Type": "application/json",
           ...addAuthHeader(token),
         },
-        body: JSON.stringify({ text: socialProofText }),
+        body: JSON.stringify({ messages: parseMessageInput(socialProofText) }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -270,6 +465,7 @@ export default function AdminSecurePage() {
         return;
       }
 
+      setSocialProofText(Array.isArray(data.banner?.messages) ? data.banner.messages.join("\n") : socialProofText);
       setSocialProofMessage("Social proof updated.");
     } catch {
       setSocialProofMessage("Update failed due to network error.");
@@ -297,13 +493,45 @@ export default function AdminSecurePage() {
 
       setSiteCopy({
         dailyCtaText: data.siteCopy?.dailyCtaText || DEFAULT_SITE_COPY.dailyCtaText,
+        dailyPriceSubtext: data.siteCopy?.dailyPriceSubtext || DEFAULT_SITE_COPY.dailyPriceSubtext,
         noEdgeMessage: data.siteCopy?.noEdgeMessage || DEFAULT_SITE_COPY.noEdgeMessage,
         headerRightText: data.siteCopy?.headerRightText || DEFAULT_SITE_COPY.headerRightText,
+        metaDescription: data.siteCopy?.metaDescription || DEFAULT_SITE_COPY.metaDescription,
         footerDisclaimer: data.siteCopy?.footerDisclaimer || DEFAULT_SITE_COPY.footerDisclaimer,
       });
       setSiteCopyMessage("Site copy updated.");
     } catch {
       setSiteCopyMessage("Update failed due to network error.");
+    }
+  }
+
+  async function savePromoBanner() {
+    if (!token) return;
+
+    setPromoMessage("");
+    try {
+      const res = await fetch("/api/admin/promo-banner", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...addAuthHeader(token),
+        },
+        body: JSON.stringify(promoBanner),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPromoMessage(data.message || "Promo update failed.");
+        return;
+      }
+
+      setPromoBanner({
+        isActive: data.promoBanner?.isActive ?? false,
+        bannerText: data.promoBanner?.bannerText || DEFAULT_PROMO_BANNER.bannerText,
+        endDatetime: data.promoBanner?.endDatetime || "",
+      });
+      setPromoMessage("Promo banner updated.");
+    } catch {
+      setPromoMessage("Promo update failed due to network error.");
     }
   }
 
@@ -400,6 +628,7 @@ export default function AdminSecurePage() {
     { id: "predictions" as const, label: "Predictions" },
     { id: "social" as const, label: "Social Proof" },
     { id: "copy" as const, label: "Site Copy" },
+    { id: "promo" as const, label: "Promo" },
     { id: "prompt" as const, label: "System Prompt" },
   ];
 
@@ -413,10 +642,7 @@ export default function AdminSecurePage() {
           </div>
           <button
             type="button"
-            onClick={() => {
-              window.localStorage.removeItem(ADMIN_TOKEN_KEY);
-              setToken(null);
-            }}
+            onClick={() => clearStoredAuth()}
             className="secondary-button"
           >
             Logout
@@ -437,92 +663,167 @@ export default function AdminSecurePage() {
         </nav>
 
         {activeTab === "predictions" ? (
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_360px]">
-            <section className="admin-section">
-              <div className="admin-section__header">
-                <div>
-                  <div className="admin-eyebrow">{selectedPredictionId ? "EDITING" : "NEW ENTRY"}</div>
-                  <h2 className="heading text-xl text-[color:var(--pure-white)]">Daily Prediction</h2>
-                </div>
-              </div>
-
-              <div className="space-y-5 p-6">
-                <div className="grid gap-4 md:grid-cols-[220px_auto]">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_360px]">
+            <div className="space-y-6">
+              <section className="admin-section">
+                <div className="admin-section__header">
                   <div>
-                    <label className="input-label" htmlFor="prediction-date">Date</label>
-                    <input
-                      id="prediction-date"
-                      type="date"
-                      value={predictionDate}
-                      onChange={(event) => setPredictionDate(event.target.value)}
-                      className="input-field mt-2"
+                    <div className="admin-eyebrow">{selectedPredictionId ? "EDITING" : "NEW ENTRY"}</div>
+                    <h2 className="heading text-xl text-[color:var(--pure-white)]">Daily Prediction</h2>
+                  </div>
+                </div>
+
+                <div className="space-y-5 p-6">
+                  <div className="grid gap-4 md:grid-cols-[220px_auto]">
+                    <div>
+                      <label className="input-label" htmlFor="prediction-date">Date</label>
+                      <input
+                        id="prediction-date"
+                        type="date"
+                        value={predictionDate}
+                        onChange={(event) => setPredictionDate(event.target.value)}
+                        className="input-field mt-2"
+                      />
+                    </div>
+
+                    <label className="admin-toggle">
+                      <input
+                        type="checkbox"
+                        checked={isNoEdgeDay}
+                        onChange={(event) => setIsNoEdgeDay(event.target.checked)}
+                      />
+                      <span>No Edge Today</span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="input-label" htmlFor="prediction-teaser">Hero Teaser</label>
+                    <p className="admin-help">Keep this mysterious. No team names, no spoiler language.</p>
+                    <textarea
+                      id="prediction-teaser"
+                      value={teaserText}
+                      onChange={(event) => setTeaserText(event.target.value)}
+                      rows={3}
+                      className="input-field mt-2 resize-none"
                     />
                   </div>
 
-                  <label className="admin-toggle">
-                    <input
-                      type="checkbox"
-                      checked={isNoEdgeDay}
-                      onChange={(event) => setIsNoEdgeDay(event.target.checked)}
-                    />
-                    <span>No Edge Today</span>
-                  </label>
-                </div>
-
-                <div>
-                  <label className="input-label" htmlFor="prediction-teaser">Hero Teaser</label>
-                  <p className="admin-help">Shown above the blurred card. Keep it to one or two sharp lines.</p>
-                  <textarea
-                    id="prediction-teaser"
-                    value={teaserText}
-                    onChange={(event) => setTeaserText(event.target.value)}
-                    rows={3}
-                    className="input-field mt-2 resize-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="input-label" htmlFor="prediction-markdown">Paid Markdown</label>
-                  <p className="admin-help">Left side is raw markdown. Right side previews the unlocked card exactly.</p>
-                  <div className="mt-2 grid gap-4 xl:grid-cols-2">
-                    <textarea
-                      id="prediction-markdown"
-                      value={markdownContent}
-                      onChange={(event) => setMarkdownContent(event.target.value)}
-                      rows={18}
-                      className="input-field mono resize-y text-sm"
-                    />
-                    <div className="admin-preview">
-                      {markdownContent.trim() ? (
-                        <MarkdownContent content={markdownContent} />
-                      ) : (
-                        <p className="text-sm text-[color:var(--silver-gray)]">Preview updates as you write.</p>
-                      )}
+                  <div>
+                    <label className="input-label" htmlFor="prediction-markdown">Paid Markdown</label>
+                    <p className="admin-help">Left side is raw markdown. Right side previews the unlocked card exactly.</p>
+                    <div className="mt-2 grid gap-4 xl:grid-cols-2">
+                      <textarea
+                        id="prediction-markdown"
+                        value={markdownContent}
+                        onChange={(event) => setMarkdownContent(event.target.value)}
+                        rows={18}
+                        className="input-field mono resize-y text-sm"
+                      />
+                      <div className="admin-preview">
+                        {markdownContent.trim() ? (
+                          <MarkdownContent content={markdownContent} />
+                        ) : (
+                          <p className="text-sm text-[color:var(--silver-gray)]">Preview updates as you write.</p>
+                        )}
+                      </div>
                     </div>
                   </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={savePrediction}
+                      disabled={predictionSaving}
+                      className="primary-button justify-center disabled:opacity-50"
+                    >
+                      {predictionSaving ? "Saving..." : "Save prediction"}
+                    </button>
+                    <button type="button" onClick={clearPredictionForm} className="secondary-button">
+                      Clear
+                    </button>
+                  </div>
+
+                  {predictionMessage ? (
+                    <p className={`admin-message ${predictionMessage.toLowerCase().includes("fail") || predictionMessage.toLowerCase().includes("required") ? "admin-message--error" : "admin-message--success"}`}>
+                      {predictionMessage}
+                    </p>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="admin-section">
+                <div className="admin-section__header">
+                  <div>
+                    <div className="admin-eyebrow">MATCH RAG</div>
+                    <h2 className="heading text-xl text-[color:var(--pure-white)]">Match-Specific Markdown</h2>
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap gap-3">
+                <div className="space-y-5 p-6">
+                  <p className="admin-help">
+                    These notes are isolated by game. Only the selected game&apos;s markdown enters the LLM context.
+                  </p>
+
+                  {matchMarkdownLoading ? (
+                    <div className="admin-preview text-sm text-[color:var(--silver-gray)]">Loading slate for {predictionDate}...</div>
+                  ) : matchMarkdownGames.length === 0 ? (
+                    <div className="admin-preview text-sm text-[color:var(--silver-gray)]">No games found for this date yet.</div>
+                  ) : (
+                    <div className="space-y-4">
+                      {matchMarkdownGames.map((game) => (
+                        <div key={game.id} className="admin-list-item space-y-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <div className="heading text-lg text-[color:var(--pure-white)]">{formatGameLabel(game)}</div>
+                              <p className="mt-1 text-[11px] text-[color:var(--silver-gray)]">
+                                {formatGameTime(game.gameTimeEST)} EST • {game.status.toUpperCase()}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-4 xl:grid-cols-2">
+                            <textarea
+                              value={matchMarkdowns[game.id] || ""}
+                              onChange={(event) =>
+                                setMatchMarkdowns((current) => ({
+                                  ...current,
+                                  [game.id]: event.target.value,
+                                }))
+                              }
+                              rows={10}
+                              className="input-field mono resize-y text-sm"
+                              placeholder={`Paste ${formatGameLabel(game)} engine markdown here...`}
+                            />
+                            <div className="admin-preview">
+                              {(matchMarkdowns[game.id] || "").trim() ? (
+                                <MarkdownContent content={matchMarkdowns[game.id] || ""} />
+                              ) : (
+                                <p className="text-sm text-[color:var(--silver-gray)]">No markdown saved for this game yet.</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <button
                     type="button"
-                    onClick={savePrediction}
-                    disabled={predictionSaving}
+                    onClick={saveMatchMarkdownEntries}
+                    disabled={matchMarkdownSaving || matchMarkdownLoading}
                     className="primary-button justify-center disabled:opacity-50"
                   >
-                    {predictionSaving ? "Saving..." : "Save prediction"}
+                    {matchMarkdownSaving ? "Saving..." : "Save match markdowns"}
                   </button>
-                  <button type="button" onClick={clearPredictionForm} className="secondary-button">
-                    Clear
-                  </button>
-                </div>
 
-                {predictionMessage ? (
-                  <p className={`admin-message ${predictionMessage.toLowerCase().includes("fail") || predictionMessage.toLowerCase().includes("required") ? "admin-message--error" : "admin-message--success"}`}>
-                    {predictionMessage}
-                  </p>
-                ) : null}
-              </div>
-            </section>
+                  {matchMarkdownMessage ? (
+                    <p className={`admin-message ${matchMarkdownMessage.toLowerCase().includes("fail") ? "admin-message--error" : "admin-message--success"}`}>
+                      {matchMarkdownMessage}
+                    </p>
+                  ) : null}
+                </div>
+              </section>
+            </div>
 
             <section className="admin-section">
               <div className="admin-section__header">
@@ -572,32 +873,23 @@ export default function AdminSecurePage() {
 
             <div className="space-y-5 p-6">
               <p className="admin-help">
-                Leave this empty to fall back to the default weekly performance copy. On No Edge days the public page auto-prefixes this with the bankroll-protection message.
+                Enter one message per line. The public ticker rotates them in sequence and slows down automatically when more messages are present.
               </p>
 
               <div>
-                <label className="input-label" htmlFor="social-proof">Banner text</label>
+                <label className="input-label" htmlFor="social-proof">Banner messages</label>
                 <textarea
                   id="social-proof"
                   value={socialProofText}
                   onChange={(event) => setSocialProofText(event.target.value)}
-                  rows={3}
+                  rows={5}
                   className="input-field mt-2 resize-none"
                 />
               </div>
 
-              <div className="social-banner">
-                <div className="social-banner__edge social-banner__edge--left" />
-                <div className="social-banner__edge social-banner__edge--right" />
-                <div className="social-banner__track">
-                  <div className="social-banner__marquee">
-                    <span className="social-banner__item">
-                      <span className="social-banner__dot" />
-                      <span className="mono">{socialProofText || "This Week: 5-0 (100%) | +19.3u ROI"}</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
+              <SocialProofBanner
+                messages={socialProofMessages.length > 0 ? socialProofMessages : ["This Week: 5-0 (100%)", "+19.3u ROI"]}
+              />
 
               <button type="button" onClick={saveSocialProof} className="primary-button justify-center">
                 Save social proof
@@ -633,6 +925,17 @@ export default function AdminSecurePage() {
               </div>
 
               <div>
+                <label className="input-label" htmlFor="copy-price">CTA subtext</label>
+                <input
+                  id="copy-price"
+                  value={siteCopy.dailyPriceSubtext}
+                  onChange={(event) => setSiteCopy((current) => ({ ...current, dailyPriceSubtext: event.target.value }))}
+                  className="input-field mt-2"
+                  placeholder="$5 one-time pass"
+                />
+              </div>
+
+              <div>
                 <label className="input-label" htmlFor="copy-header">Header right text</label>
                 <input
                   id="copy-header"
@@ -640,6 +943,16 @@ export default function AdminSecurePage() {
                   onChange={(event) => setSiteCopy((current) => ({ ...current, headerRightText: event.target.value }))}
                   className="input-field mt-2"
                   placeholder="5-0 This Week"
+                />
+              </div>
+
+              <div>
+                <label className="input-label" htmlFor="copy-meta">Meta description</label>
+                <input
+                  id="copy-meta"
+                  value={siteCopy.metaDescription}
+                  onChange={(event) => setSiteCopy((current) => ({ ...current, metaDescription: event.target.value }))}
+                  className="input-field mt-2"
                 />
               </div>
 
@@ -675,6 +988,78 @@ export default function AdminSecurePage() {
                 <div className="xl:col-span-2">
                   <p className={`admin-message ${siteCopyMessage.toLowerCase().includes("fail") ? "admin-message--error" : "admin-message--success"}`}>
                     {siteCopyMessage}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === "promo" ? (
+          <section className="admin-section">
+            <div className="admin-section__header">
+              <div>
+                <div className="admin-eyebrow">LAUNCH MODE</div>
+                <h2 className="heading text-xl text-[color:var(--pure-white)]">Promo Banner</h2>
+              </div>
+            </div>
+
+            <div className="grid gap-5 p-6 xl:grid-cols-2">
+              <label className="admin-toggle">
+                <input
+                  type="checkbox"
+                  checked={promoBanner.isActive}
+                  onChange={(event) => setPromoBanner((current) => ({ ...current, isActive: event.target.checked }))}
+                />
+                <span>Promo Banner Active</span>
+              </label>
+
+              <div>
+                <label className="input-label" htmlFor="promo-end">End datetime</label>
+                <input
+                  id="promo-end"
+                  type="datetime-local"
+                  value={toDateTimeLocalValue(promoBanner.endDatetime)}
+                  onChange={(event) =>
+                    setPromoBanner((current) => ({
+                      ...current,
+                      endDatetime: event.target.value ? new Date(event.target.value).toISOString() : "",
+                    }))
+                  }
+                  className="input-field mt-2"
+                />
+              </div>
+
+              <div className="xl:col-span-2">
+                <label className="input-label" htmlFor="promo-copy">Promo banner text</label>
+                <textarea
+                  id="promo-copy"
+                  value={promoBanner.bannerText}
+                  onChange={(event) => setPromoBanner((current) => ({ ...current, bannerText: event.target.value }))}
+                  rows={4}
+                  className="input-field mt-2 resize-none"
+                />
+              </div>
+
+              <div className="xl:col-span-2 admin-preview">
+                <p className="text-sm text-[color:var(--pure-white)]">
+                  {promoBanner.isActive ? "Promo is armed." : "Promo is disabled."}
+                </p>
+                <p className="mt-2 text-[11px] leading-5 text-[color:var(--silver-gray)]">
+                  When active, the public page swaps paid CTA copy to free-access copy and requires email before direct unlock.
+                </p>
+              </div>
+
+              <div className="xl:col-span-2">
+                <button type="button" onClick={savePromoBanner} className="primary-button justify-center">
+                  Save promo settings
+                </button>
+              </div>
+
+              {promoMessage ? (
+                <div className="xl:col-span-2">
+                  <p className={`admin-message ${promoMessage.toLowerCase().includes("fail") ? "admin-message--error" : "admin-message--success"}`}>
+                    {promoMessage}
                   </p>
                 </div>
               ) : null}

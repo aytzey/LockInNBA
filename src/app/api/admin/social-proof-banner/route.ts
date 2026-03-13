@@ -12,7 +12,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
   const banner = await getSocialProofBanner();
-  return NextResponse.json({ banner: banner?.text || "" });
+  return NextResponse.json({
+    banner: banner?.messages?.[0] || "",
+    messages: banner?.messages || [],
+  });
 }
 
 export async function PUT(request: NextRequest) {
@@ -21,7 +24,9 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => null);
-  const text = (body?.text || "").toString();
-  const banner = await setSocialProofBanner(text);
+  const messages = Array.isArray(body?.messages)
+    ? body.messages
+    : (body?.text || "").toString();
+  const banner = await setSocialProofBanner(messages);
   return NextResponse.json({ banner });
 }

@@ -13,7 +13,7 @@ export interface DailyPrediction {
 
 export interface SocialProofBanner {
   id: string;
-  text: string;
+  messages: string[];
   isActive: boolean;
   updatedAt: string;
 }
@@ -21,9 +21,19 @@ export interface SocialProofBanner {
 export interface SiteCopy {
   id: string;
   dailyCtaText: string;
+  dailyPriceSubtext: string;
   noEdgeMessage: string;
   headerRightText: string;
+  metaDescription: string;
   footerDisclaimer: string;
+  updatedAt: string;
+}
+
+export interface PromoBanner {
+  id: string;
+  isActive: boolean;
+  bannerText: string;
+  endDatetime: string;
   updatedAt: string;
 }
 
@@ -62,6 +72,15 @@ export interface Game {
   venue: string;
   gameUrl: string;
   apiGameId: string;
+}
+
+export interface MatchMarkdown {
+  id: string;
+  gameId: string;
+  date: string;
+  markdownContent: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ChatMessage {

@@ -5,7 +5,9 @@ import {
   ChatSession,
   DailyPrediction,
   Game,
+  MatchMarkdown,
   Payment,
+  PromoBanner,
   SiteCopy,
   SocialProofBanner,
   SystemPrompt,
@@ -29,14 +31,29 @@ interface DataRefreshState {
 }
 
 export const DEFAULT_SOCIAL_PROOF_TEXT = "This Week: 5-0 (100%) | +19.3u ROI";
+export const DEFAULT_SOCIAL_PROOF_MESSAGES = [
+  "This Week: 5-0 (100%)",
+  "+19.3u ROI",
+  "We passed on 90% of this week's board",
+];
 export const DEFAULT_NO_EDGE_BANNER_PREFIX = "Today: No Edge — Protecting Your Bankroll";
 
 const DEFAULT_SITE_COPY_CONTENT = {
-  dailyCtaText: "Unlock Tonight's Edge — $5",
+  dailyCtaText: "Unlock Tonight's Edge",
+  dailyPriceSubtext: "$5 one-time pass",
   noEdgeMessage: "We passed on 90% of this week's games. We only bet when the math screams.",
   headerRightText: "",
+  metaDescription: "LOCKIN is a premium AI sports analytics platform delivering nightly NBA moneyline analysis and per-game statistical insights.",
   footerDisclaimer:
     "For entertainment purposes only. LOCKIN does not accept wagers or guarantee outcomes. If you or someone you know has a gambling problem, call 1-800-GAMBLER.",
+};
+
+const DEFAULT_PROMO_BANNER: PromoBanner = {
+  id: "default",
+  isActive: false,
+  bannerText: "LAUNCH WEEK: 100% FREE ACCESS — Unlock every pick & AI chat free for 7 days.",
+  endDatetime: "",
+  updatedAt: new Date().toISOString(),
 };
 
 type RowValue = string | number | boolean | Date | null | undefined;
@@ -66,6 +83,39 @@ function toNullableNumber(value: RowValue): number | null {
   return typeof value === "number" ? value : Number(value);
 }
 
+function normalizeMessages(value: RowValue): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => String(item ?? "").trim())
+          .filter(Boolean);
+      }
+    } catch {
+      // fall through to line-based parsing
+    }
+
+    return trimmed
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
 function mapPrediction(row: Record<string, RowValue>): DailyPrediction {
   return {
     id: String(row.id),
@@ -80,9 +130,15 @@ function mapPrediction(row: Record<string, RowValue>): DailyPrediction {
 }
 
 function mapSocialProofBanner(row: Record<string, RowValue>): SocialProofBanner {
+  const messages = normalizeMessages(row.messages_json).length > 0
+    ? normalizeMessages(row.messages_json)
+    : normalizeMessages(row.text).length > 0
+      ? normalizeMessages(row.text)
+      : [...DEFAULT_SOCIAL_PROOF_MESSAGES];
+
   return {
     id: String(row.id),
-    text: String(row.text ?? ""),
+    messages,
     isActive: Boolean(row.is_active),
     updatedAt: toIsoString(row.updated_at),
   };
@@ -102,9 +158,32 @@ function mapSiteCopy(row: Record<string, RowValue>): SiteCopy {
   return {
     id: String(row.id),
     dailyCtaText: String(row.daily_cta_text ?? DEFAULT_SITE_COPY_CONTENT.dailyCtaText),
+    dailyPriceSubtext: String(row.daily_price_subtext ?? DEFAULT_SITE_COPY_CONTENT.dailyPriceSubtext),
     noEdgeMessage: String(row.no_edge_message ?? DEFAULT_SITE_COPY_CONTENT.noEdgeMessage),
     headerRightText: String(row.header_right_text ?? DEFAULT_SITE_COPY_CONTENT.headerRightText),
+    metaDescription: String(row.meta_description ?? DEFAULT_SITE_COPY_CONTENT.metaDescription),
     footerDisclaimer: String(row.footer_disclaimer ?? DEFAULT_SITE_COPY_CONTENT.footerDisclaimer),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapPromoBanner(row: Record<string, RowValue>): PromoBanner {
+  return {
+    id: String(row.id),
+    isActive: Boolean(row.is_active),
+    bannerText: String(row.banner_text ?? DEFAULT_PROMO_BANNER.bannerText),
+    endDatetime: row.end_datetime ? toIsoString(row.end_datetime) : "",
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapMatchMarkdown(row: Record<string, RowValue>): MatchMarkdown {
+  return {
+    id: String(row.id),
+    gameId: String(row.game_id),
+    date: String(row.date),
+    markdownContent: String(row.markdown_content ?? ""),
+    createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at),
   };
 }
@@ -356,23 +435,26 @@ export async function getSocialProofBanner(): Promise<SocialProofBanner | null> 
   }
 
   const banner = mapSocialProofBanner(result.rows[0] as Record<string, RowValue>);
-  if (!banner.isActive || !banner.text.trim()) {
+  if (!banner.isActive || banner.messages.length === 0) {
     return null;
   }
 
   return banner;
 }
 
-export async function setSocialProofBanner(text: string): Promise<SocialProofBanner> {
+export async function setSocialProofBanner(input: string[] | string): Promise<SocialProofBanner> {
+  const messages = normalizeMessages(Array.isArray(input) ? JSON.stringify(input) : input);
+  const text = messages[0] || "";
   const result = await query(
-    `INSERT INTO social_proof_banner (id, text, is_active, updated_at)
-     VALUES ('default', $1, $2, NOW())
+    `INSERT INTO social_proof_banner (id, text, messages_json, is_active, updated_at)
+     VALUES ('default', $1, $2::jsonb, $3, NOW())
      ON CONFLICT (id) DO UPDATE
        SET text = EXCLUDED.text,
+           messages_json = EXCLUDED.messages_json,
            is_active = EXCLUDED.is_active,
            updated_at = NOW()
      RETURNING *`,
-    [text, text.trim().length > 0],
+    [text, JSON.stringify(messages), messages.length > 0],
   );
 
   return mapSocialProofBanner(result.rows[0] as Record<string, RowValue>);
@@ -394,15 +476,19 @@ export async function getSiteCopy(): Promise<SiteCopy> {
 
 export async function setSiteCopy(input: {
   dailyCtaText?: string;
+  dailyPriceSubtext?: string;
   noEdgeMessage?: string;
   headerRightText?: string;
+  metaDescription?: string;
   footerDisclaimer?: string;
 }): Promise<SiteCopy> {
   const current = await getSiteCopy();
   const next = {
     dailyCtaText: input.dailyCtaText?.trim() || DEFAULT_SITE_COPY_CONTENT.dailyCtaText,
+    dailyPriceSubtext: input.dailyPriceSubtext?.trim() || DEFAULT_SITE_COPY_CONTENT.dailyPriceSubtext,
     noEdgeMessage: input.noEdgeMessage?.trim() || DEFAULT_SITE_COPY_CONTENT.noEdgeMessage,
     headerRightText: input.headerRightText?.trim() || "",
+    metaDescription: input.metaDescription?.trim() || DEFAULT_SITE_COPY_CONTENT.metaDescription,
     footerDisclaimer: input.footerDisclaimer?.trim() || DEFAULT_SITE_COPY_CONTENT.footerDisclaimer,
   };
 
@@ -410,27 +496,149 @@ export async function setSiteCopy(input: {
     `INSERT INTO site_copy (
        id,
        daily_cta_text,
+       daily_price_subtext,
        no_edge_message,
        header_right_text,
+       meta_description,
        footer_disclaimer,
        updated_at
-     ) VALUES ('default', $1, $2, $3, $4, NOW())
+     ) VALUES ('default', $1, $2, $3, $4, $5, $6, NOW())
      ON CONFLICT (id) DO UPDATE
        SET daily_cta_text = EXCLUDED.daily_cta_text,
+           daily_price_subtext = EXCLUDED.daily_price_subtext,
            no_edge_message = EXCLUDED.no_edge_message,
            header_right_text = EXCLUDED.header_right_text,
+           meta_description = EXCLUDED.meta_description,
            footer_disclaimer = EXCLUDED.footer_disclaimer,
            updated_at = NOW()
      RETURNING *`,
     [
       next.dailyCtaText || current.dailyCtaText,
+      next.dailyPriceSubtext || current.dailyPriceSubtext,
       next.noEdgeMessage || current.noEdgeMessage,
       next.headerRightText,
+      next.metaDescription || current.metaDescription,
       next.footerDisclaimer || current.footerDisclaimer,
     ],
   );
 
   return mapSiteCopy(result.rows[0] as Record<string, RowValue>);
+}
+
+export async function getPromoBanner(): Promise<PromoBanner> {
+  const result = await query(`SELECT * FROM promo_banner WHERE id = 'default' LIMIT 1`);
+
+  if (!result.rows[0]) {
+    return {
+      ...DEFAULT_PROMO_BANNER,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  return mapPromoBanner(result.rows[0] as Record<string, RowValue>);
+}
+
+export async function setPromoBanner(input: {
+  isActive?: boolean;
+  bannerText?: string;
+  endDatetime?: string;
+}): Promise<PromoBanner> {
+  const current = await getPromoBanner();
+  const next = {
+    isActive: input.isActive ?? current.isActive,
+    bannerText: input.bannerText?.trim() || current.bannerText || DEFAULT_PROMO_BANNER.bannerText,
+    endDatetime: input.endDatetime?.trim() || current.endDatetime || "",
+  };
+
+  const result = await query(
+    `INSERT INTO promo_banner (
+       id,
+       is_active,
+       banner_text,
+       end_datetime,
+       created_at,
+       updated_at
+     ) VALUES ('default', $1, $2, NULLIF($3, '')::timestamptz, NOW(), NOW())
+     ON CONFLICT (id) DO UPDATE
+       SET is_active = EXCLUDED.is_active,
+           banner_text = EXCLUDED.banner_text,
+           end_datetime = EXCLUDED.end_datetime,
+           updated_at = NOW()
+     RETURNING *`,
+    [next.isActive, next.bannerText, next.endDatetime],
+  );
+
+  return mapPromoBanner(result.rows[0] as Record<string, RowValue>);
+}
+
+export async function getActivePromoBanner(): Promise<PromoBanner | null> {
+  const banner = await getPromoBanner();
+  if (!banner.isActive || !banner.endDatetime) {
+    return null;
+  }
+
+  const endsAt = new Date(banner.endDatetime).getTime();
+  if (Number.isNaN(endsAt) || endsAt <= Date.now()) {
+    return null;
+  }
+
+  return banner;
+}
+
+export async function listMatchMarkdownsForDate(date = getEstDateKey()): Promise<MatchMarkdown[]> {
+  const result = await query(
+    `SELECT * FROM match_markdowns WHERE date = $1 ORDER BY created_at ASC, id ASC`,
+    [date],
+  );
+
+  return result.rows.map((row) => mapMatchMarkdown(row as Record<string, RowValue>));
+}
+
+export async function getMatchMarkdown(gameId: string, date = getEstDateKey()): Promise<MatchMarkdown | null> {
+  const result = await query(
+    `SELECT * FROM match_markdowns WHERE game_id = $1 AND date = $2 LIMIT 1`,
+    [gameId, date],
+  );
+
+  return result.rows[0] ? mapMatchMarkdown(result.rows[0] as Record<string, RowValue>) : null;
+}
+
+export async function saveMatchMarkdowns(
+  date: string,
+  entries: Array<{ gameId: string; markdownContent: string }>,
+): Promise<MatchMarkdown[]> {
+  return withTransaction(async (client) => {
+    for (const entry of entries) {
+      const markdownContent = entry.markdownContent.trim();
+      if (!entry.gameId) {
+        continue;
+      }
+
+      if (!markdownContent) {
+        await client.query(
+          `DELETE FROM match_markdowns WHERE game_id = $1 AND date = $2`,
+          [entry.gameId, date],
+        );
+        continue;
+      }
+
+      await client.query(
+        `INSERT INTO match_markdowns (id, game_id, date, markdown_content, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, NOW(), NOW())
+         ON CONFLICT (game_id, date) DO UPDATE
+           SET markdown_content = EXCLUDED.markdown_content,
+               updated_at = NOW()`,
+        [crypto.randomUUID(), entry.gameId, date, markdownContent],
+      );
+    }
+
+    const result = await client.query(
+      `SELECT * FROM match_markdowns WHERE date = $1 ORDER BY created_at ASC, id ASC`,
+      [date],
+    );
+
+    return result.rows.map((row) => mapMatchMarkdown(row as Record<string, RowValue>));
+  });
 }
 
 export async function getActiveSystemPrompt(): Promise<SystemPrompt> {

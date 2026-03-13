@@ -7,21 +7,31 @@ import type { Game, ChatMessage, ChatSessionState } from "./types";
 import {
   CHAT_SESSION_RESTORE_PREFIX,
   CHAT_TOKEN_PREFIX,
+  LEAD_EMAIL_KEY,
   formatEstTime,
   moneyline,
+  validateEmail,
 } from "./utils";
 import { createCheckout, waitForCheckout, mockComplete } from "./api";
 import MarkdownContent from "./MarkdownContent";
 
 interface ChatModalProps {
   game: Game;
+  promoActive: boolean;
   onClose: () => void;
   onShareRequest: () => void;
   isShareBusy: boolean;
   onMessagesChange: (messages: ChatMessage[]) => void;
 }
 
-export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, onMessagesChange }: ChatModalProps) {
+export default function ChatModal({
+  game,
+  promoActive,
+  onClose,
+  onShareRequest,
+  isShareBusy,
+  onMessagesChange,
+}: ChatModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -34,6 +44,28 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
   const [isChatBusy, setIsChatBusy] = useState(false);
   const [chatError, setChatError] = useState("");
   const [isInitializing, setIsInitializing] = useState(true);
+  const [leadEmail, setLeadEmail] = useState("");
+  const [hasMatchMarkdown, setHasMatchMarkdown] = useState(true);
+
+  useEffect(() => {
+    try {
+      setLeadEmail(window.localStorage.getItem(LEAD_EMAIL_KEY) || "");
+    } catch {
+      // Ignore local storage failures.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!leadEmail.trim()) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(LEAD_EMAIL_KEY, leadEmail.trim());
+    } catch {
+      // Ignore local storage failures.
+    }
+  }, [leadEmail]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -61,6 +93,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
             setChatSession(session);
             setChatQuestionsRemaining(restoredData.questionsRemaining ?? 0);
             setChatMessages(restoredData.messages ?? []);
+            setHasMatchMarkdown(restoredData.hasMatchMarkdown ?? true);
             onMessagesChange(restoredData.messages ?? []);
             const restoredToken = window.localStorage.getItem(`${CHAT_TOKEN_PREFIX}${session.id}`);
             setChatToken(restoredToken || null);
@@ -83,6 +116,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
         setChatSession(session);
         setChatQuestionsRemaining(data.questionsRemaining ?? 0);
         setChatMessages(data.messages ?? []);
+        setHasMatchMarkdown(data.hasMatchMarkdown ?? true);
         onMessagesChange(data.messages ?? []);
         const cachedToken = window.localStorage.getItem(`${CHAT_TOKEN_PREFIX}${session.id}`);
         setChatToken(cachedToken || null);
@@ -114,6 +148,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
     if (data.session) {
       setChatSession(data.session as ChatSessionState);
       setChatQuestionsRemaining(data.questionsRemaining ?? 0);
+      setHasMatchMarkdown(data.hasMatchMarkdown ?? true);
     }
     if (Array.isArray(data.messages)) {
       const nextMessages = data.messages as ChatMessage[];
@@ -122,26 +157,33 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
     }
   }
 
-  async function openCheckoutAndWait(type: "match_chat" | "extra_questions") {
-    if (!chatSession) return;
+  async function openCheckoutAndWait(type: "match_chat" | "extra_questions", email?: string) {
+    if (!chatSession) return null;
     const checkout = await createCheckout({
       type,
+      email,
       gameId: chatSession.gameId,
       chatSessionId: chatSession.id,
     });
 
     let token: string;
-    if (checkout.checkoutUrl === "__mock__") {
+    if (checkout.checkoutUrl === "__free__") {
+      token = checkout.accessToken || "";
+    } else if (checkout.checkoutUrl === "__mock__") {
       token = await mockComplete(checkout.sessionId);
     } else {
       const popup = window.open(checkout.checkoutUrl, "lemonsqueezy", "width=460,height=720,left=200,top=100");
       if (!popup) {
         window.localStorage.setItem(`${CHAT_SESSION_RESTORE_PREFIX}${chatSession.gameId}`, chatSession.id);
         window.location.href = checkout.checkoutUrl;
-        return;
+        return null;
       }
       token = (await waitForCheckout(checkout.sessionId)).accessToken || "";
       try { popup.close(); } catch {}
+    }
+
+    if (!token) {
+      throw new Error("Checkout could not be completed.");
     }
 
     window.localStorage.setItem(`${CHAT_SESSION_RESTORE_PREFIX}${chatSession.gameId}`, chatSession.id);
@@ -156,8 +198,16 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
     if (chatSession.isPaid && chatQuestionsRemaining > 0) return;
     setChatError("");
     try {
-      await openCheckoutAndWait("match_chat");
-      toast.success("Chat unlocked! Ask your questions.");
+      const email = leadEmail.trim().toLowerCase();
+      if (promoActive && !validateEmail(email)) {
+        throw new Error("Enter a valid email to unlock free launch access.");
+      }
+
+      const token = await openCheckoutAndWait("match_chat", promoActive ? email : undefined);
+      if (!token) {
+        return;
+      }
+      toast.success(promoActive ? "AI room opened for free." : "Chat unlocked! Ask your questions.");
       inputRef.current?.focus();
     } catch (error) {
       setChatError(error instanceof Error ? error.message : "Payment failed");
@@ -171,7 +221,10 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
     }
     setChatError("");
     try {
-      await openCheckoutAndWait("extra_questions");
+      const token = await openCheckoutAndWait("extra_questions");
+      if (!token) {
+        return;
+      }
       toast.success("+3 questions unlocked!");
       inputRef.current?.focus();
     } catch (error) {
@@ -245,7 +298,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
               <div className="mb-2 flex items-center gap-2">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--silver-gray)]">Matchup room</p>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--silver-gray)]">AI matchup analysis</p>
                 {game.status === "live" && <span className="live-dot" />}
               </div>
               <div className="heading flex items-center gap-2 text-xl font-semibold text-[color:var(--pure-white)]">
@@ -285,7 +338,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
               />
-              <span className="mt-3 text-sm text-[var(--muted)]">Opening matchup room...</span>
+              <span className="mt-3 text-sm text-[var(--muted)]">Opening AI analysis...</span>
             </div>
           ) : chatMessages.length === 0 ? (
             <motion.div
@@ -306,9 +359,17 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
               <p className="max-w-sm text-[11px] leading-5 text-[color:var(--silver-gray)]">
                 {isPaid
                   ? "Ask for market read, team shape, risk framing or game-script pressure."
-                  : "Unlock this room for $2 to ask three focused matchup questions."}
+                  : promoActive
+                    ? "Launch week is live. Unlock this room free with your email and get three focused questions."
+                    : "Start a deep analysis for this game. Three questions unlock for $2."}
               </p>
             </motion.div>
+          ) : null}
+
+          {!isInitializing && !hasMatchMarkdown ? (
+            <div className="chat-context-note">
+              Our engine has not published a game-specific markdown read for this matchup yet. The AI is using live board data only.
+            </div>
           ) : null}
 
           {chatMessages.map((message, index) => (
@@ -379,9 +440,11 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
             <span className={`mono rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] ${
               isPaid
                 ? "border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)] text-[color:var(--money-green)]"
-                : "border border-[color:var(--gold-line)] bg-[color:var(--gold-soft)] text-[color:var(--gold)]"
+                : promoActive
+                  ? "border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)] text-[color:var(--money-green)]"
+                  : "border border-[color:var(--gold-line)] bg-[color:var(--gold-soft)] text-[color:var(--gold)]"
             }`}>
-              {isPaid ? "Active" : "Locked"}
+              {isPaid ? "Active" : promoActive ? "Free" : "Locked"}
             </span>
             <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-[color:var(--silver-gray)]">
               {questionLimit > 0
@@ -394,28 +457,65 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-3 space-y-2.5"
+              className="chat-paywall"
             >
               {!isPaid ? (
-                <motion.button
-                  type="button"
-                  onClick={ensureChatPaid}
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="primary-button w-full justify-center"
-                >
-                  Ask AI about this game — $2
-                </motion.button>
+                <>
+                  <div className="chat-paywall__copy">
+                    <div className="chat-paywall__eyebrow">{promoActive ? "Launch Week Unlock" : "Deep Analysis Unlock"}</div>
+                    <p className="chat-paywall__title">
+                      Start a deep analysis for {game.awayTeam} @ {game.homeTeam}.
+                    </p>
+                    <p className="chat-paywall__body">
+                      {promoActive
+                        ? "3 questions included. Free launch access unlocks instantly after you enter your email."
+                        : "3 questions included. Unlock this room for $2 to get the engine view, risk framing, and pressure points."}
+                    </p>
+                  </div>
+
+                  {promoActive ? (
+                    <div className="space-y-2">
+                      <label className="input-label" htmlFor="chat-lead-email">Email required for free access</label>
+                      <input
+                        id="chat-lead-email"
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        value={leadEmail}
+                        onChange={(event) => setLeadEmail(event.target.value)}
+                        placeholder="you@lockinmail.com"
+                        className="input-field"
+                      />
+                    </div>
+                  ) : null}
+
+                  <motion.button
+                    type="button"
+                    onClick={ensureChatPaid}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="primary-button w-full justify-center"
+                  >
+                    {promoActive ? "Ask AI Free" : "Unlock for $2"}
+                  </motion.button>
+                </>
               ) : (
-                <motion.button
-                  type="button"
-                  onClick={purchaseExtra}
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="secondary-button w-full justify-center"
-                >
-                  +3 more questions — $1
-                </motion.button>
+                <>
+                  <div className="chat-paywall__copy">
+                    <div className="chat-paywall__eyebrow">Question Limit Reached</div>
+                    <p className="chat-paywall__title">Need more depth?</p>
+                    <p className="chat-paywall__body">Add 3 more questions for $1 and keep this room active.</p>
+                  </div>
+                  <motion.button
+                    type="button"
+                    onClick={purchaseExtra}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="secondary-button w-full justify-center"
+                  >
+                    +3 more questions — $1
+                  </motion.button>
+                </>
               )}
             </motion.div>
           )}
@@ -450,7 +550,7 @@ export default function ChatModal({ game, onClose, onShareRequest, isShareBusy, 
             </div>
             {!canSend && (
               <p className="text-[11px] text-[color:var(--silver-gray)]">
-                {isPaid ? "Buy more questions to keep the room active." : "Unlock the room to start asking."}
+                {isPaid ? "Buy more questions to keep the room active." : promoActive ? "Enter your email to unlock this room for free." : "Unlock the room to start asking."}
               </p>
             )}
           </div>

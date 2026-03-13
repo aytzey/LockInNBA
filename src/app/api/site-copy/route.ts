@@ -6,8 +6,10 @@ export async function GET() {
 
   return NextResponse.json({
     dailyCtaText: siteCopy.dailyCtaText,
+    dailyPriceSubtext: siteCopy.dailyPriceSubtext,
     noEdgeMessage: siteCopy.noEdgeMessage,
     headerRightText: siteCopy.headerRightText,
+    metaDescription: siteCopy.metaDescription,
     footerDisclaimer: siteCopy.footerDisclaimer,
   });
 }

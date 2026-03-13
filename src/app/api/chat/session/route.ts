@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createChatSession, remainingQuestions, getChatMessages } from "@/lib/store";
+import { createChatSession, remainingQuestions, getChatMessages, getMatchMarkdown } from "@/lib/store";
+import { getEstDateKey } from "@/lib/time";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
@@ -10,10 +11,12 @@ export async function POST(request: NextRequest) {
   }
 
   const session = await createChatSession(gameId);
+  const hasMatchMarkdown = Boolean(await getMatchMarkdown(session.gameId, getEstDateKey()));
   return NextResponse.json({
     session,
     questionsRemaining: await remainingQuestions(session.id),
     messages: await getChatMessages(session.id),
+    hasMatchMarkdown,
   });
 }
 

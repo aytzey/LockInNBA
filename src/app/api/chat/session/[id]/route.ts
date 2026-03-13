@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getChatSession, getChatMessages, remainingQuestions } from "@/lib/store";
+import { getChatSession, getChatMessages, getMatchMarkdown, remainingQuestions } from "@/lib/store";
+import { getEstDateKey } from "@/lib/time";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,5 +13,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     session,
     questionsRemaining: await remainingQuestions(id),
     messages: await getChatMessages(id),
+    hasMatchMarkdown: Boolean(await getMatchMarkdown(session.gameId, getEstDateKey())),
   });
 }

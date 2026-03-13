@@ -45,3 +45,4 @@ export function validateEmail(email: string): boolean {
 export const DAILY_TOKEN_KEY = "lockin_daily_token";
 export const CHAT_TOKEN_PREFIX = "lockin_chat_token_";
 export const CHAT_SESSION_RESTORE_PREFIX = "lockin_chat_session_restore_";
+export const LEAD_EMAIL_KEY = "lockin_lead_email";
