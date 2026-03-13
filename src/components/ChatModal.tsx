@@ -283,7 +283,7 @@ export default function ChatModal({
       style={{ backdropFilter: "blur(10px)" }}
     >
       <motion.div
-        className="flex max-h-[95vh] w-full flex-col overflow-hidden rounded-t-[2rem] border border-[color:var(--line-strong)] bg-[color:var(--panel-strong)] md:max-h-[88vh] md:max-w-3xl md:rounded-[2rem]"
+        className="flex max-h-[95dvh] w-full flex-col overflow-hidden rounded-t-[1.5rem] border border-[color:var(--line-strong)] bg-[color:var(--panel-strong)] md:max-h-[88vh] md:max-w-3xl md:rounded-[2rem]"
         initial={{ opacity: 0, y: 60, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 40, scale: 0.97 }}
@@ -301,18 +301,18 @@ export default function ChatModal({
                 <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--silver-gray)]">AI matchup analysis</p>
                 {game.status === "live" && <span className="live-dot" />}
               </div>
-              <div className="heading flex items-center gap-2 text-xl font-semibold text-[color:var(--pure-white)]">
+              <div className="heading flex items-center gap-2 text-lg font-semibold text-[color:var(--pure-white)] md:text-xl">
                 {game.awayTeam}
-                <span className="text-sm text-[color:var(--silver-gray)]">@</span>
+                <span className="text-xs text-[color:var(--silver-gray)] md:text-sm">@</span>
                 {game.homeTeam}
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--silver-gray)]">
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[color:var(--silver-gray)] md:mt-2 md:text-[11px]">
                 <span>{game.statusDetail}</span>
                 <span className="text-[color:var(--line-strong)]">•</span>
                 <span>{formatEstTime(game.gameTimeEST)} EST</span>
-                <span className="text-[color:var(--line-strong)]">•</span>
-                <span>{game.awayTeam} {moneyline(game.awayMoneyline)}</span>
-                <span>{game.homeTeam} {moneyline(game.homeMoneyline)}</span>
+                <span className="hidden text-[color:var(--line-strong)] md:inline">•</span>
+                <span className="hidden md:inline">{game.awayTeam} {moneyline(game.awayMoneyline)}</span>
+                <span className="hidden md:inline">{game.homeTeam} {moneyline(game.homeMoneyline)}</span>
               </div>
             </div>
             <motion.button
@@ -320,7 +320,7 @@ export default function ChatModal({
               onClick={onClose}
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
-              className="ml-3 flex h-9 w-9 items-center justify-center rounded-xl border border-[color:var(--line)] text-[var(--muted)] transition hover:border-[color:var(--line-strong)] hover:bg-white/[0.04] hover:text-white"
+              className="ml-3 flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--line)] text-[var(--muted)] transition hover:border-[color:var(--line-strong)] hover:bg-white/[0.04] hover:text-white md:h-9 md:w-9"
               aria-label="Close chat"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -330,7 +330,7 @@ export default function ChatModal({
           </div>
         </div>
 
-        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+        <div className="flex-1 space-y-2.5 overflow-y-auto overscroll-contain px-3 py-3 md:space-y-3 md:px-4 md:py-4">
           {isInitializing ? (
             <div className="flex flex-col items-center justify-center py-12">
               <motion.div
@@ -344,7 +344,7 @@ export default function ChatModal({
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center justify-center rounded-[1.5rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-6 py-10 text-center"
+              className="flex flex-col items-center justify-center rounded-[1.25rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-4 py-6 text-center md:rounded-[1.5rem] md:px-6 md:py-10"
             >
               <motion.div
                 className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[color:var(--accent-soft)] text-xl"
@@ -378,10 +378,10 @@ export default function ChatModal({
               initial={{ opacity: 0, y: 12, scale: 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.3, delay: index === chatMessages.length - 1 ? 0.05 : 0 }}
-              className={`rounded-[1.35rem] p-4 ${
+              className={`rounded-[1.15rem] p-3 md:rounded-[1.35rem] md:p-4 ${
                 message.role === "user"
-                  ? "ml-auto max-w-[85%] border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)]"
-                  : "border border-[color:var(--line)] bg-[color:var(--panel-soft)]"
+                  ? "ml-auto max-w-[85%] break-words border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)]"
+                  : "break-words border border-[color:var(--line)] bg-[color:var(--panel-soft)]"
               }`}
             >
               <div className="mono mb-2 flex items-center gap-1.5 text-[11px]">
@@ -425,7 +425,7 @@ export default function ChatModal({
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="flex-shrink-0 border-t border-[color:var(--line)] bg-[color:var(--panel)]/95 px-4 py-3">
+        <div className="flex-shrink-0 border-t border-[color:var(--line)] bg-[color:var(--panel)]/95 px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] md:px-4 md:py-3">
           {chatError && (
             <motion.p
               initial={{ opacity: 0, x: -10 }}

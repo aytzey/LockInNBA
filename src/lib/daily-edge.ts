@@ -19,8 +19,10 @@ const AUTO_PREDICTION_REFRESH_MS = Math.max(
 ) * 1000;
 const LIVE_GAMES_REFRESH_MS = 60 * 1000;
 const FINAL_GAMES_REFRESH_MS = 15 * 60 * 1000;
-const EMPTY_SLATE_REFRESH_MS = 30 * 60 * 1000;
+const EMPTY_SLATE_REFRESH_MS = 5 * 60 * 1000;
 const LIVE_TRACKING_LEAD_MS = 5 * 60 * 1000;
+/** Once a non-empty fixture is stored for today, keep it for 24 h. */
+const FIXTURE_CACHE_MS = 24 * 60 * 60 * 1000;
 
 declare global {
   var __lockinGamesRefreshJobs: Map<string, Promise<{
@@ -134,8 +136,10 @@ function shouldRefreshGames(
     return true;
   }
 
-  if (games.length > 0 && date === getEstDateKey() && !shouldTrackStartedGames(date, games)) {
-    // Once today's slate is cached, keep using the DB schedule until tipoff.
+  const isToday = date === getEstDateKey();
+
+  // Fixture-level cache: today's non-live slate stays DB-backed until tipoff.
+  if (games.length > 0 && isToday && !shouldTrackStartedGames(date, games)) {
     return false;
   }
 
@@ -148,7 +152,14 @@ function shouldRefreshGames(
     return true;
   }
 
-  return (Date.now() - updatedAt) >= getGamesRefreshWindowMs(date, games);
+  const age = Date.now() - updatedAt;
+
+  // Non-today dates with cached games: fixture is stable for 24 hours.
+  if (games.length > 0 && !isToday) {
+    return age >= FIXTURE_CACHE_MS;
+  }
+
+  return age >= getGamesRefreshWindowMs(date, games);
 }
 
 export async function getFreshGames(date = getEstDateKey(), forceRefresh = false): Promise<{
@@ -177,9 +188,11 @@ export async function getFreshGames(date = getEstDateKey(), forceRefresh = false
     try {
       const games = await fetchTodayGames(date, forceRefresh ? { bypassCache: true } : undefined);
       if (games.length === 0) {
+        // ESPN returned no games; record the attempt so we don't hammer ESPN.
+        const nextState = await touchGamesRefreshState(date);
         return {
           games: cachedGames,
-          updatedAt: lastUpdatedAt,
+          updatedAt: nextState.updatedAt,
           refreshed: false,
         };
       }
@@ -192,9 +205,11 @@ export async function getFreshGames(date = getEstDateKey(), forceRefresh = false
         refreshed: true,
       };
     } catch {
+      // ESPN fetch failed; stamp the attempt so we back off properly.
+      const fallbackState = await touchGamesRefreshState(date).catch(() => null);
       return {
         games: cachedGames,
-        updatedAt: lastUpdatedAt,
+        updatedAt: fallbackState?.updatedAt ?? lastUpdatedAt ?? new Date().toISOString(),
         refreshed: false,
       };
     } finally {
@@ -214,6 +229,7 @@ export async function getPublicGames(date = getEstDateKey()): Promise<PublicGame
     const result = await getFreshGames(date);
     return {
       ...result,
+      updatedAt: result.updatedAt ?? new Date().toISOString(),
       source: "cache",
       cacheControl: "volatile",
     };
@@ -224,6 +240,7 @@ export async function getPublicGames(date = getEstDateKey()): Promise<PublicGame
     const retryResult = result.games.length === 0 ? await getFreshGames(date, true) : result;
     return {
       ...retryResult,
+      updatedAt: retryResult.updatedAt ?? new Date().toISOString(),
       source: "cache",
       cacheControl: shouldTrackStartedGames(date, retryResult.games) ? "volatile" : "fixture",
     };
@@ -255,7 +272,7 @@ export async function getPublicGames(date = getEstDateKey()): Promise<PublicGame
 
   return {
     games: cachedGames,
-    updatedAt: lastUpdatedAt,
+    updatedAt: lastUpdatedAt ?? new Date().toISOString(),
     refreshed: false,
     source: "cache",
     cacheControl: shouldUseLiveWindow ? "volatile" : "fixture",

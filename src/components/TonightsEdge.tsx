@@ -222,12 +222,12 @@ function TonightsEdgeContent({
             exit={{ opacity: 0, y: -18 }}
             className="space-y-6"
           >
-            <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)] px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-[color:var(--money-green)]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)] px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[color:var(--money-green)] md:px-4 md:py-2 md:text-[11px]">
               <span className="glow-dot" />
               Daily edge unlocked
             </div>
 
-            <div className="rounded-[1.8rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-6 py-6 md:px-7">
+            <div className="rounded-[1.25rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-4 py-4 md:rounded-[1.8rem] md:px-7 md:py-6">
               <MarkdownContent content={dailyMarkdown} />
             </div>
 
@@ -276,7 +276,7 @@ function TonightsEdgeContent({
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -18 }}
-            className="space-y-6"
+            className="space-y-4 md:space-y-6"
           >
             <div className="hero-preview">
               <h1 className="heading hero-preview__headline">{preview.headline}</h1>
@@ -284,9 +284,9 @@ function TonightsEdgeContent({
                 <div className="hero-preview__brandwash" aria-hidden="true">
                   <LockinMark className="h-full w-full" />
                 </div>
-                <div className="hero-preview__blur-stack blurred space-y-3">
+                <div className="hero-preview__blur-stack blurred space-y-2 md:space-y-3">
                   {preview.blurredLines.map((line, index) => (
-                    <p key={index} className="hero-preview__blur-line">
+                    <p key={index} className="hero-preview__blur-line text-sm md:text-base">
                       {line}
                     </p>
                   ))}

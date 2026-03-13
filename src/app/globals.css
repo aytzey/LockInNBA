@@ -1178,6 +1178,11 @@ textarea:-webkit-autofill {
     justify-content: center;
   }
 
+  .promo-banner__close {
+    width: 2.6rem;
+    height: 2.6rem;
+  }
+
   .brand-lockup {
     gap: 0.72rem;
   }
@@ -1196,12 +1201,22 @@ textarea:-webkit-autofill {
     width: 3.1rem;
   }
 
+  .brand-lockup__rail {
+    display: none;
+  }
+
   .hero-card {
     padding: 1.3rem;
+    border-radius: 1.25rem;
   }
 
   .hero-preview__headline {
-    font-size: 2.2rem;
+    font-size: 1.65rem;
+    line-height: 1;
+  }
+
+  .hero-preview__blur-shell {
+    padding: 1.2rem 1rem;
   }
 
   .hero-preview__brandwash {
@@ -1216,6 +1231,100 @@ textarea:-webkit-autofill {
 
   .hero-lead-capture__badge {
     width: 100%;
+  }
+
+  .social-banner {
+    height: 34px;
+  }
+
+  .social-banner__item {
+    font-size: 10px;
+    padding: 0 0.9rem;
+  }
+
+  .game-card {
+    padding: 1.1rem;
+    border-radius: 1.25rem;
+  }
+
+  .game-card__logo {
+    width: 1.85rem;
+    height: 1.85rem;
+  }
+
+  .game-card__logos {
+    gap: 0.35rem;
+  }
+
+  .game-card__badge {
+    padding: 0.38rem 0.65rem;
+    font-size: 9px;
+  }
+
+  .game-card__moneyline {
+    padding: 0.75rem 0.85rem;
+    border-radius: 0.85rem;
+  }
+
+  .game-card__moneyline-value {
+    font-size: 0.92rem;
+  }
+
+  .game-card__cta {
+    padding: 0.5rem 0.8rem;
+    font-size: 9px;
+  }
+
+  .primary-button,
+  .secondary-button {
+    min-height: 2.75rem;
+    padding: 0.85rem 1.15rem;
+    font-size: 0.88rem;
+  }
+
+  .primary-button--hero {
+    padding: 1rem 1.2rem;
+    font-size: 0.95rem;
+  }
+
+  .input-field {
+    min-height: 2.75rem;
+    padding: 0.8rem 0.9rem;
+    font-size: 16px;
+  }
+
+  .chat-paywall {
+    padding: 0.85rem;
+    gap: 0.75rem;
+  }
+
+  .chat-paywall__title {
+    font-size: 0.95rem;
+  }
+
+  .site-header {
+    border-radius: 1.25rem;
+    padding: 0.85rem 1rem;
+  }
+
+  .site-header__date {
+    font-size: 10px;
+  }
+
+  .site-header__note {
+    font-size: 9px;
+    padding: 0.28rem 0.6rem;
+  }
+
+  .pending-card,
+  .empty-board-card {
+    padding: 1.5rem 1.2rem;
+    border-radius: 1.25rem;
+  }
+
+  .no-edge-card {
+    padding: 1.4rem 1.2rem;
+    border-radius: 1.25rem;
   }
 }
 
