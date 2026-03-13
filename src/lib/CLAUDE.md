@@ -26,7 +26,7 @@ This directory contains the product logic that should be treated as source-of-tr
 
 - `getFreshGames()` is the stale-aware cache path.
 - `getPublicGames()` is the public-route path and may return `source: "live"`.
-- same-day live slates are special; other dates are cache-driven.
+- same-day schedules should stay DB-backed until tipoff; live windows are special.
 - in-flight refresh dedupe is process-local and intentional.
 
 ## Persistence Rules

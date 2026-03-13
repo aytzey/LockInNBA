@@ -104,7 +104,7 @@ Core file:
 Refresh windows:
 
 - live games: fastest refresh
-- upcoming slate today: moderate refresh
+- upcoming slate today: cached from DB after the first daily fixture sync
 - finals: slower refresh
 - empty slate: slowest refresh
 
@@ -112,7 +112,7 @@ Mechanics:
 
 - stale-aware DB reads use `data_refresh_state`
 - in-flight refreshes are deduped per date in process memory
-- same-day public board can bypass cache and call ESPN directly
+- same-day public board only bypasses cache once tipoff is near or live data is needed
 
 Most important rule:
 
@@ -120,10 +120,10 @@ Most important rule:
 
 That is why `getPublicGames()` does this:
 
-1. read cached rows
-2. try a direct ESPN no-store fetch
-3. if any live games exist, merge live snapshot over cached context
-4. otherwise fall back to normal stale-aware cache refresh
+1. fetch and persist the daily fixture once when the DB has no slate for that EST date
+2. serve the cached schedule from Postgres before tipoff
+3. switch to direct ESPN no-store reads only when a scheduled game is near/after tipoff or already live
+4. merge the live snapshot over cached betting context and write it back asynchronously so finals eventually settle in DB
 
 Do not "simplify" this back into a DB-only path unless product requirements change.
 

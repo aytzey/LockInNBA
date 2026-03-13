@@ -18,9 +18,9 @@ const AUTO_PREDICTION_REFRESH_MS = Math.max(
   Number.parseInt(getOptionalEnv("LOCKIN_AUTO_PREDICTION_REFRESH_SECONDS") || "1800", 10) || 1800,
 ) * 1000;
 const LIVE_GAMES_REFRESH_MS = 60 * 1000;
-const UPCOMING_GAMES_REFRESH_MS = 5 * 60 * 1000;
 const FINAL_GAMES_REFRESH_MS = 15 * 60 * 1000;
 const EMPTY_SLATE_REFRESH_MS = 30 * 60 * 1000;
+const LIVE_TRACKING_LEAD_MS = 5 * 60 * 1000;
 
 declare global {
   var __lockinGamesRefreshJobs: Map<string, Promise<{
@@ -36,6 +36,14 @@ function getGamesRefreshJobs() {
   }
 
   return globalThis.__lockinGamesRefreshJobs;
+}
+
+export interface PublicGamesResult {
+  games: Game[];
+  updatedAt: string | null;
+  refreshed: boolean;
+  source: "cache" | "live";
+  cacheSnapshot?: Game[];
 }
 
 export function predictionHasContent(prediction: DailyPrediction): boolean {
@@ -83,15 +91,36 @@ function getGamesRefreshWindowMs(date: string, games: Game[]): number {
     return EMPTY_SLATE_REFRESH_MS;
   }
 
-  if (games.some((game) => game.status === "live")) {
+  if (shouldTrackStartedGames(date, games)) {
     return LIVE_GAMES_REFRESH_MS;
   }
 
-  if (games.some((game) => game.status === "upcoming")) {
-    return date === getEstDateKey() ? UPCOMING_GAMES_REFRESH_MS : EMPTY_SLATE_REFRESH_MS;
+  return FINAL_GAMES_REFRESH_MS;
+}
+
+function shouldTrackStartedGames(date: string, games: Game[]): boolean {
+  if (date !== getEstDateKey()) {
+    return games.some((game) => game.status === "live");
   }
 
-  return FINAL_GAMES_REFRESH_MS;
+  const now = Date.now();
+
+  return games.some((game) => {
+    if (game.status === "live") {
+      return true;
+    }
+
+    if (game.status === "final") {
+      return false;
+    }
+
+    const tipoffAt = new Date(game.gameTimeEST).getTime();
+    if (Number.isNaN(tipoffAt)) {
+      return false;
+    }
+
+    return now >= (tipoffAt - LIVE_TRACKING_LEAD_MS);
+  });
 }
 
 function shouldRefreshGames(
@@ -102,6 +131,11 @@ function shouldRefreshGames(
 ): boolean {
   if (forceRefresh) {
     return true;
+  }
+
+  if (games.length > 0 && date === getEstDateKey() && !shouldTrackStartedGames(date, games)) {
+    // Once today's slate is cached, keep using the DB schedule until tipoff.
+    return false;
   }
 
   if (!lastUpdatedAt) {
@@ -163,12 +197,7 @@ export async function getFreshGames(date = getEstDateKey(), forceRefresh = false
   return job;
 }
 
-export async function getPublicGames(date = getEstDateKey()): Promise<{
-  games: Game[];
-  updatedAt: string | null;
-  refreshed: boolean;
-  source: "cache" | "live";
-}> {
+export async function getPublicGames(date = getEstDateKey()): Promise<PublicGamesResult> {
   const today = getEstDateKey();
   const { cachedGames, lastUpdatedAt } = await loadGamesState(date);
 
@@ -180,32 +209,39 @@ export async function getPublicGames(date = getEstDateKey()): Promise<{
     };
   }
 
-  if (cachedGames.some((game) => game.status === "live")) {
+  if (cachedGames.length === 0) {
+    const result = await getFreshGames(date);
+    return {
+      ...result,
+      source: "cache",
+    };
+  }
+
+  if (shouldTrackStartedGames(date, cachedGames)) {
     try {
       const liveSnapshot = await fetchTodayGames(date, { bypassCache: true });
+      const mergedGames = mergeLatestGames(cachedGames, liveSnapshot);
+      const shouldPersistSnapshot =
+        !lastUpdatedAt ||
+        Number.isNaN(new Date(lastUpdatedAt).getTime()) ||
+        (Date.now() - new Date(lastUpdatedAt).getTime()) >= LIVE_GAMES_REFRESH_MS;
+
       return {
-        games: mergeLatestGames(cachedGames, liveSnapshot),
+        games: mergedGames,
         updatedAt: new Date().toISOString(),
         refreshed: true,
         source: "live",
+        cacheSnapshot: shouldPersistSnapshot ? mergedGames : undefined,
       };
     } catch {
       // Fall back to cached/stale refresh path when the direct live pull fails.
     }
   }
 
-  if (!shouldRefreshGames(date, cachedGames, lastUpdatedAt, false)) {
-    return {
-      games: cachedGames,
-      updatedAt: lastUpdatedAt,
-      refreshed: false,
-      source: "cache",
-    };
-  }
-
-  const result = await getFreshGames(date);
   return {
-    ...result,
+    games: cachedGames,
+    updatedAt: lastUpdatedAt,
+    refreshed: false,
     source: "cache",
   };
 }
@@ -213,6 +249,11 @@ export async function getPublicGames(date = getEstDateKey()): Promise<{
 export async function syncTodayGames(date = getEstDateKey(), forceRefresh = false): Promise<Game[]> {
   const result = await getFreshGames(date, forceRefresh);
   return result.games;
+}
+
+export async function persistGamesSnapshot(date: string, games: Game[]): Promise<void> {
+  await setGames(date, games);
+  await touchGamesRefreshState(date);
 }
 
 export async function refreshPredictionForDate(date = getEstDateKey(), forcePrediction = false): Promise<{

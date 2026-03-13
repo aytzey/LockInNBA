@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getPublicGames, getPublicPredictionPreview } from "@/lib/daily-edge";
+import { after, NextResponse } from "next/server";
+import { getPublicGames, getPublicPredictionPreview, persistGamesSnapshot } from "@/lib/daily-edge";
 import { DEFAULT_SOCIAL_PROOF_TEXT, getSiteCopy, getSocialProofBanner } from "@/lib/store";
 import { getEstDateKey } from "@/lib/time";
 
@@ -14,6 +14,17 @@ export async function GET() {
     getSocialProofBanner(),
     getSiteCopy(),
   ]);
+  const cacheSnapshot = gamesResult.cacheSnapshot;
+
+  if (cacheSnapshot) {
+    after(async () => {
+      try {
+        await persistGamesSnapshot(date, cacheSnapshot);
+      } catch {
+        // Serve the live snapshot even if the cache write falls behind.
+      }
+    });
+  }
 
   return NextResponse.json(
     {
