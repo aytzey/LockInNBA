@@ -34,13 +34,13 @@ function renderMarkdown(source: string): string {
 
     if (trimmed.startsWith("# ")) {
       if (inList) { output.push("</ul>"); inList = false; }
-      output.push(`<h1 class="text-xl font-bold text-[color:var(--accent-strong)] mt-4 mb-2 heading">${escapeHtml(trimmed.slice(2))}</h1>`);
+      output.push(`<h1 class="text-xl md:text-2xl font-bold text-[color:var(--accent-strong)] mt-5 mb-2.5 heading">${escapeHtml(trimmed.slice(2))}</h1>`);
     } else if (trimmed.startsWith("## ")) {
       if (inList) { output.push("</ul>"); inList = false; }
-      output.push(`<h2 class="text-lg font-semibold text-[color:var(--accent-strong)] mt-3 mb-1 heading">${escapeHtml(trimmed.slice(3))}</h2>`);
+      output.push(`<h2 class="text-lg md:text-xl font-semibold text-[color:var(--accent-strong)] mt-4 mb-1.5 heading">${escapeHtml(trimmed.slice(3))}</h2>`);
     } else if (trimmed.startsWith("### ")) {
       if (inList) { output.push("</ul>"); inList = false; }
-      output.push(`<h3 class="text-base font-semibold text-[color:var(--amber)] mt-2 mb-1 heading">${escapeHtml(trimmed.slice(4))}</h3>`);
+      output.push(`<h3 class="text-base md:text-lg font-semibold text-[color:var(--amber)] mt-3 mb-1 heading">${escapeHtml(trimmed.slice(4))}</h3>`);
     } else if (trimmed.startsWith("- ")) {
       if (!inList) { output.push('<ul class="list-none space-y-1 my-2">'); inList = true; }
       output.push(`<li class="flex gap-2 text-[color:var(--text-soft)]"><span class="text-[color:var(--accent-strong)] mt-0.5">▸</span><span>${formatInline(trimmed.slice(2))}</span></li>`);

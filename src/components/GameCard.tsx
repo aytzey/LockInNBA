@@ -90,7 +90,10 @@ export default function GameCard({ game, onOpenChat, promoActive = false }: Game
         </div>
       ) : null}
 
-      <div className="mt-3 flex items-center justify-end border-t border-[color:var(--line)] pt-3 md:mt-5 md:pt-4">
+      <div className="mt-3 flex items-center justify-between border-t border-[color:var(--line)] pt-3 md:mt-5 md:pt-4">
+        <span className="hidden text-[10px] tracking-[0.08em] text-[color:var(--silver-gray)] md:inline">
+          {game.spread} · O/U {game.total}
+        </span>
         <span className="game-card__cta">{promoActive ? "Ask AI Free" : "Ask AI"}</span>
       </div>
     </button>

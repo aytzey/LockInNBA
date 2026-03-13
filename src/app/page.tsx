@@ -496,15 +496,16 @@ export default function HomePage() {
         <section ref={gameSectionRef} className="space-y-4 md:space-y-6">
           <div className="flex flex-wrap items-end justify-between gap-3 md:gap-4">
             <div className="space-y-1 md:space-y-2">
-              <h2 className="heading text-[1.3rem] text-[color:var(--pure-white)] md:text-[1.9rem]">
+              <h2 className="heading text-[1.3rem] text-[color:var(--pure-white)] md:text-[2.1rem]">
                 Tonight&apos;s Matchups
               </h2>
               <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--silver-gray)]">
                 Moneyline board only
               </p>
             </div>
-            <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--silver-gray)]">
-              {lastUpdatedLabel ? `Updated ${lastUpdatedLabel} ET` : "Waiting for live sync"}
+            <div className="mono inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] text-[color:var(--silver-gray)] md:text-[11px]">
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${lastUpdatedLabel ? "bg-[color:var(--money-green)]" : "bg-[color:var(--gold)] animate-pulse"}`} />
+              {lastUpdatedLabel ? `Updated ${lastUpdatedLabel} ET` : "Syncing board"}
             </div>
           </div>
 

@@ -283,7 +283,7 @@ export default function ChatModal({
       style={{ backdropFilter: "blur(10px)" }}
     >
       <motion.div
-        className="flex max-h-[95dvh] w-full flex-col overflow-hidden rounded-t-[1.5rem] border border-[color:var(--line-strong)] bg-[color:var(--panel-strong)] md:max-h-[88vh] md:max-w-3xl md:rounded-[2rem]"
+        className="relative flex max-h-[95dvh] w-full flex-col overflow-hidden rounded-t-[1.5rem] border border-[color:var(--line-strong)] bg-[color:var(--panel-strong)] shadow-[0_32px_80px_rgba(0,0,0,0.5)] md:max-h-[88vh] md:max-w-3xl md:rounded-[2rem]"
         initial={{ opacity: 0, y: 60, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 40, scale: 0.97 }}
