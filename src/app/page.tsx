@@ -24,10 +24,13 @@ const GAMES_FETCH_TIMEOUT_MS = 8_000;
 const FALLBACK_FETCH_TIMEOUT_MS = 5_000;
 const INIT_SAFETY_TIMEOUT_MS = 12_000;
 
-function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number, externalSignal?: AbortSignal): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timeoutId));
+  const signal = externalSignal
+    ? AbortSignal.any([controller.signal, externalSignal])
+    : controller.signal;
+  return fetch(url, { ...options, signal }).finally(() => clearTimeout(timeoutId));
 }
 
 function jsonWithTimeout<T>(response: Response, timeoutMs: number): Promise<T | null> {
@@ -89,11 +92,12 @@ function buildSocialProofMessages(baseMessages: string[], isNoEdgeDay: boolean):
 export default function HomePage() {
   const shareCardRef = useRef<HTMLDivElement>(null);
   const gameSectionRef = useRef<HTMLDivElement>(null);
-  const hasRetriedEmptyBoardRef = useRef(false);
+  const retryCountRef = useRef(0);
 
   const [hasMounted, setHasMounted] = useState(false);
   const [isBoardLoading, setIsBoardLoading] = useState(true);
   const [isPredictionLoading, setIsPredictionLoading] = useState(true);
+  const [initError, setInitError] = useState(false);
   const [todayPrediction, setTodayPrediction] = useState<TodayPrediction | null>(null);
   const [socialProofMessages, setSocialProofMessages] = useState(DEFAULT_SOCIAL_PROOF_MESSAGES);
   const [siteCopy, setSiteCopy] = useState<SiteCopy>(DEFAULT_SITE_COPY);
@@ -164,7 +168,8 @@ export default function HomePage() {
         setLastUpdatedAt(new Date().toISOString());
       }
       return body;
-    } catch {
+    } catch (err) {
+      console.warn("[LOCKIN] fetchGames failed:", err);
       return null;
     }
   }, []);
@@ -195,9 +200,10 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
+    const { signal } = controller;
     const safetyTimeoutId = window.setTimeout(() => {
-      if (!cancelled) {
+      if (!signal.aborted) {
         setIsBoardLoading(false);
         setIsPredictionLoading(false);
       }
@@ -207,13 +213,16 @@ export default function HomePage() {
       let initialGames: Game[] = [];
 
       const fallbackInit = async () => {
+        console.warn("[LOCKIN] bootstrap unavailable, falling back to individual endpoints");
         const [gamesBody, predictionResponse, socialProofResponse, siteCopyResponse, promoBannerResponse] = await Promise.all([
           fetchGames(),
-          fetchWithTimeout("/api/predictions/today", {}, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null),
-          fetchWithTimeout("/api/social-proof", {}, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null),
-          fetchWithTimeout("/api/site-copy", {}, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null),
-          fetchWithTimeout("/api/promo-banner", {}, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null),
+          fetchWithTimeout("/api/predictions/today", {}, FALLBACK_FETCH_TIMEOUT_MS, signal).catch((err: unknown) => { console.warn("[LOCKIN] fallback predictions failed:", err); return null; }),
+          fetchWithTimeout("/api/social-proof", {}, FALLBACK_FETCH_TIMEOUT_MS, signal).catch((err: unknown) => { console.warn("[LOCKIN] fallback social-proof failed:", err); return null; }),
+          fetchWithTimeout("/api/site-copy", {}, FALLBACK_FETCH_TIMEOUT_MS, signal).catch((err: unknown) => { console.warn("[LOCKIN] fallback site-copy failed:", err); return null; }),
+          fetchWithTimeout("/api/promo-banner", {}, FALLBACK_FETCH_TIMEOUT_MS, signal).catch((err: unknown) => { console.warn("[LOCKIN] fallback promo-banner failed:", err); return null; }),
         ]);
+
+        if (signal.aborted) return;
 
         initialGames = (gamesBody?.games as Game[] | undefined) || [];
         setIsBoardLoading(false);
@@ -224,6 +233,8 @@ export default function HomePage() {
           siteCopyResponse?.ok ? jsonWithTimeout(siteCopyResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null) : Promise.resolve(null),
           promoBannerResponse?.ok ? jsonWithTimeout(promoBannerResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null) : Promise.resolve(null),
         ]);
+
+        if (signal.aborted) return;
 
         if (predictionBody) {
           setTodayPrediction(predictionBody);
@@ -248,11 +259,15 @@ export default function HomePage() {
       };
 
       try {
-        const bootstrapResponse = await fetchWithTimeout("/api/bootstrap", { cache: "no-store" }, BOOTSTRAP_TIMEOUT_MS).catch(() => null);
+        const bootstrapResponse = await fetchWithTimeout("/api/bootstrap", { cache: "no-store" }, BOOTSTRAP_TIMEOUT_MS, signal).catch(() => null);
+        if (signal.aborted) return;
+
         if (!bootstrapResponse?.ok) {
           await fallbackInit();
         } else {
           const bootstrap = await jsonWithTimeout(bootstrapResponse, BOOTSTRAP_TIMEOUT_MS).catch(() => null);
+          if (signal.aborted) return;
+
           if (!bootstrap) {
             await fallbackInit();
           } else {
@@ -281,12 +296,15 @@ export default function HomePage() {
           }
         }
 
+        if (signal.aborted) return;
+
         const params = new URLSearchParams(window.location.search);
         const checkoutSessionId = params.get("checkout_session");
         if (checkoutSessionId) {
           window.history.replaceState({}, "", "/");
           const poll = async () => {
             for (let attempt = 0; attempt < 20; attempt += 1) {
+              if (signal.aborted) return;
               const result = await pollCheckoutStatus(checkoutSessionId).catch(() => null);
               if (result?.accessToken) {
                 if (result.type === "daily_pick") {
@@ -320,18 +338,23 @@ export default function HomePage() {
           await unlockDailyPrediction(savedToken);
         }
       } finally {
-        setIsBoardLoading(false);
-        setIsPredictionLoading(false);
+        if (!signal.aborted) {
+          setIsBoardLoading(false);
+          setIsPredictionLoading(false);
+        }
       }
     }
 
-    void init().catch(() => {
-      setIsBoardLoading(false);
-      setIsPredictionLoading(false);
+    void init().catch((err) => {
+      console.warn("[LOCKIN] init failed:", err);
+      if (!signal.aborted) {
+        setIsBoardLoading(false);
+        setIsPredictionLoading(false);
+      }
     });
 
     return () => {
-      cancelled = true;
+      controller.abort();
       window.clearTimeout(safetyTimeoutId);
     };
   }, [fetchGames, unlockDailyPrediction]);
@@ -378,14 +401,22 @@ export default function HomePage() {
   }, [fetchGames, games, isBoardLoading]);
 
   useEffect(() => {
-    if (isBoardLoading || games.length > 0 || hasRetriedEmptyBoardRef.current) {
+    if (isBoardLoading || games.length > 0 || retryCountRef.current >= 2) {
       return;
     }
 
-    hasRetriedEmptyBoardRef.current = true;
-    const timeoutId = window.setTimeout(() => {
-      void fetchGames();
-    }, 1200);
+    const delayMs = retryCountRef.current === 0 ? 1500 : 4000;
+    const attempt = retryCountRef.current;
+    retryCountRef.current += 1;
+
+    const timeoutId = window.setTimeout(async () => {
+      console.warn(`[LOCKIN] auto-retry ${attempt + 1}/2 for empty board`);
+      const result = await fetchGames();
+      const loaded = Array.isArray(result?.games) && result.games.length > 0;
+      if (!loaded && retryCountRef.current >= 2) {
+        setInitError(true);
+      }
+    }, delayMs);
 
     return () => {
       window.clearTimeout(timeoutId);
@@ -412,6 +443,15 @@ export default function HomePage() {
       setSelectedGame(nextSelectedGame);
     }
   }, [games, selectedGame]);
+
+  function handleRetry() {
+    setInitError(false);
+    setIsBoardLoading(true);
+    retryCountRef.current = 0;
+    void fetchGames().then(() => {
+      setIsBoardLoading(false);
+    });
+  }
 
   function handleOpenChat(game: Game) {
     setSelectedGame(game);
@@ -516,6 +556,18 @@ export default function HomePage() {
 
           {isBoardLoading && hasMounted ? (
             <GameListSkeleton />
+          ) : games.length === 0 && initError ? (
+            <div className="empty-board-card">
+              <div className="empty-board-card__eyebrow">CONNECTION ISSUE</div>
+              <h3 className="heading empty-board-card__title">Couldn&apos;t load tonight&apos;s board.</h3>
+              <p className="empty-board-card__body">Tap below to try again.</p>
+              <button
+                onClick={handleRetry}
+                className="mt-4 rounded-xl bg-[color:var(--money-green)] px-6 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+              >
+                Retry
+              </button>
+            </div>
           ) : games.length === 0 ? (
             <div className="empty-board-card">
               <div className="empty-board-card__eyebrow">BOARD STATUS</div>
