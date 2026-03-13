@@ -160,6 +160,7 @@ jobs:
 
           for version in versions[keep_count:]:
               label = version["VersionLabel"]
+              bundle = version.get("SourceBundle") or {}
               subprocess.run(
                   [
                       "aws",
@@ -171,9 +172,18 @@ jobs:
                       region,
                       "--version-label",
                       label,
-                      "--delete-source-bundle",
                   ],
                   check=True,
               )
+              if bundle.get("S3Bucket") and bundle.get("S3Key"):
+                  subprocess.run(
+                      [
+                          "aws",
+                          "s3",
+                          "rm",
+                          f"s3://{bundle['S3Bucket']}/{bundle['S3Key']}",
+                      ],
+                      check=False,
+                  )
               print(f"deleted {label}")
           PY
