@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import toast from "react-hot-toast";
 import { validateEmail, DAILY_TOKEN_KEY } from "./utils";
 
@@ -116,9 +117,18 @@ export default function RestoreAccess({ onRestore, footerDisclaimer }: RestoreAc
         ) : null}
       </div>
 
-      <p className="mx-auto max-w-3xl text-center text-[10px] leading-5 text-[color:var(--silver-gray)]">
-        {footerDisclaimer}
-      </p>
+      <div className="space-y-2 text-center">
+        <p className="mx-auto max-w-3xl text-[10px] leading-5 text-[color:var(--silver-gray)]">{footerDisclaimer}</p>
+        <div className="flex items-center justify-center gap-3 text-[10px] uppercase tracking-[0.22em] text-[color:var(--silver-gray)]">
+          <Link href="/privacy" className="transition hover:text-[color:var(--pure-white)]">
+            Privacy
+          </Link>
+          <span className="text-[color:var(--line-strong)]">/</span>
+          <Link href="/terms" className="transition hover:text-[color:var(--pure-white)]">
+            Terms
+          </Link>
+        </div>
+      </div>
     </footer>
   );
 }
