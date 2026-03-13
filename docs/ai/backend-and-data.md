@@ -256,6 +256,8 @@ Magic-link behavior is intentionally narrow:
 - tokens expire after one hour
 - tokens are one-time use
 - successful verification issues a new signed daily access token
+- when `LOCKIN_MAIL_FROM` is configured, the route sends the restore link by email through SES
+- without mail configuration, the route falls back to returning the direct verification link for local/dev workflows
 
 This is an access restoration feature, not a passwordless account system.
 

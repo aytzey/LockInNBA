@@ -83,6 +83,7 @@ docker run --rm -p 3000:3000 --env-file .env lockin-nba:test
 - `LOCKIN_SYNC_SECRET`
 - `LOCKIN_AUTO_PREDICTION_REFRESH_SECONDS`
 - `ORIGIN_VERIFY_SECRET`
+- `LOCKIN_MAIL_FROM`
 
 ## Deploy reality
 

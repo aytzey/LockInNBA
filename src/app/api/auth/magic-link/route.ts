@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sendMagicLinkEmail, getMailFromAddress } from "@/lib/email";
 import { createMagicLink } from "@/lib/store";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -26,8 +27,29 @@ export async function POST(request: NextRequest) {
   }
 
   const magicLink = `/api/auth/verify-magic/${token}`;
+  const magicLinkUrl = new URL(magicLink, request.nextUrl.origin || "http://localhost:3000").toString();
+
+  if (getMailFromAddress()) {
+    try {
+      await sendMagicLinkEmail({
+        to: email,
+        magicLinkUrl,
+      });
+
+      return NextResponse.json({
+        message: "Check your inbox for your restore link.",
+        delivery: "email",
+      });
+    } catch (error) {
+      console.error("Magic link email send failed", error);
+    }
+  }
+
   return NextResponse.json({
-    message: "Magic link generated",
+    message: getMailFromAddress()
+      ? "Email delivery unavailable. Restoring access in browser."
+      : "Magic link generated",
+    delivery: "direct_link",
     magicLink,
   });
 }

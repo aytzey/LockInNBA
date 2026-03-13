@@ -40,7 +40,7 @@ Double-check auth before changing these.
 - `payments/status` exists so the frontend can poll a hosted checkout result
 - `mock-complete` is still the local-development fallback
 - `webhook` is now part of the Lemon Squeezy path, not just a placeholder
-- magic-link issuance returns a link payload because there is no real email sender yet
+- magic-link issuance sends email when `LOCKIN_MAIL_FROM` is configured and falls back to a direct-link payload for local/dev use
 
 ## Internal Ops Route
 

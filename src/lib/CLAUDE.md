@@ -49,6 +49,6 @@ If you add or change a field:
 
 - rate limiting is in-memory
 - payments are mock
-- email sending is not wired to a provider
+- transactional email delivery is optional and currently depends on SES plus `LOCKIN_MAIL_FROM`
 
 If you change any of those areas, document the new truth in `docs/ai/backend-and-data.md` too.

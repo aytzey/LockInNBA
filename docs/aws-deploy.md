@@ -109,6 +109,7 @@ Lambda function env icinde en az su degiskenler tanimli olmali:
 - `LOCKIN_SYNC_SECRET`
 - `LOCKIN_AUTO_PREDICTION_REFRESH_SECONDS`
 - `ORIGIN_VERIFY_SECRET`
+- `LOCKIN_MAIL_FROM`
 
 Production env su an:
 

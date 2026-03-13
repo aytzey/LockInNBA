@@ -84,6 +84,7 @@ Critical app env:
 - `LOCKIN_SYNC_SECRET`
 - `LOCKIN_AUTO_PREDICTION_REFRESH_SECONDS`
 - `ORIGIN_VERIFY_SECRET`
+- `LOCKIN_MAIL_FROM`
 
 Optional payment-provider env:
 

@@ -34,6 +34,7 @@ LOCKIN_ADMIN_SECRET=...
 LOCKIN_TOKEN_SECRET=...
 LOCKIN_SYNC_SECRET=...
 LOCKIN_AUTO_PREDICTION_REFRESH_SECONDS=1800
+LOCKIN_MAIL_FROM=noreply@lockinpicks.com
 ```
 
 ## Run
@@ -53,6 +54,7 @@ App tables also enable RLS during bootstrap and revoke `anon` / `authenticated` 
 ## Notes
 
 - Payments are still completed through the local checkout completion route.
+- Magic-link restore emails use SES when `LOCKIN_MAIL_FROM` is configured; otherwise the API falls back to returning the direct restore link.
 - Supabase pooler hosts are not always `aws-0`. Check the dashboard for the exact cluster prefix such as `aws-1-<region>.pooler.supabase.com`.
 - The transaction pooler variant is the same host on port `6543`; it is useful for migrations and short-lived CLI jobs.
 

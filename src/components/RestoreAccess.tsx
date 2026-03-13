@@ -40,6 +40,18 @@ export default function RestoreAccess({ onRestore, footerDisclaimer }: RestoreAc
         return;
       }
 
+      if (data.delivery === "email") {
+        setMessage(data.message || "Check your inbox for your restore link.");
+        setIsError(false);
+        setEmail("");
+        toast.success("Restore link sent.");
+        return;
+      }
+
+      if (typeof data.magicLink !== "string") {
+        throw new Error("Could not create restore link.");
+      }
+
       const verify = await fetch(data.magicLink);
       const verifyBody = await verify.json();
       if (!verify.ok || !verifyBody.accessToken) {
