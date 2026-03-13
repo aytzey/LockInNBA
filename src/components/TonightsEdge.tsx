@@ -183,7 +183,7 @@ function TonightsEdgeContent({
 
   return (
     <section className="hero-card">
-      <AnimatePresence mode="wait">
+      <AnimatePresence initial={false} mode="wait">
         {dailyUnlocked ? (
           <motion.div
             key="unlocked"
