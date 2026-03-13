@@ -28,6 +28,8 @@ function createPool(): Pool {
   return new Pool({
     connectionString,
     max: 3,
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 30_000,
     ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
   });
 }

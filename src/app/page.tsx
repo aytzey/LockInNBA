@@ -207,11 +207,12 @@ export default function HomePage() {
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
+    // Safety net: unconditionally clear loading state after timeout.
+    // Calling setState on an unmounted component is a no-op in React 18+,
+    // so this is safe and prevents the skeleton from staying stuck forever.
     const safetyTimeoutId = window.setTimeout(() => {
-      if (!signal.aborted) {
-        setIsBoardLoading(false);
-        setIsPredictionLoading(false);
-      }
+      setIsBoardLoading(false);
+      setIsPredictionLoading(false);
     }, INIT_SAFETY_TIMEOUT_MS);
 
     async function init() {
@@ -343,19 +344,15 @@ export default function HomePage() {
           await unlockDailyPrediction(savedToken);
         }
       } finally {
-        if (!signal.aborted) {
-          setIsBoardLoading(false);
-          setIsPredictionLoading(false);
-        }
+        setIsBoardLoading(false);
+        setIsPredictionLoading(false);
       }
     }
 
     void init().catch((err) => {
       console.warn("[LOCKIN] init failed:", err);
-      if (!signal.aborted) {
-        setIsBoardLoading(false);
-        setIsPredictionLoading(false);
-      }
+      setIsBoardLoading(false);
+      setIsPredictionLoading(false);
     });
 
     return () => {
@@ -365,8 +362,20 @@ export default function HomePage() {
   }, [fetchGames, unlockDailyPrediction]);
 
   useEffect(() => {
+    // Always listen for visibility changes so returning to the tab can
+    // recover from a stuck-loading state (mobile Safari throttles timers
+    // for background tabs, so the safety timeout may fire late).
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void fetchGames();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     if (isBoardLoading) {
-      return;
+      return () => {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      };
     }
 
     const hasLiveGames = games.some((game) => game.status === "live");
@@ -390,14 +399,6 @@ export default function HomePage() {
     const intervalId = window.setInterval(() => {
       void refreshGames();
     }, intervalMs);
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void fetchGames();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.clearInterval(intervalId);
