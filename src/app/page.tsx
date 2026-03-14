@@ -24,6 +24,29 @@ const GAMES_FETCH_TIMEOUT_MS = 8_000;
 const FALLBACK_FETCH_TIMEOUT_MS = 5_000;
 const INIT_SAFETY_TIMEOUT_MS = 12_000;
 
+type GamesResponse = {
+  games?: Game[];
+  updatedAt?: string;
+};
+
+type SocialProofResponse = {
+  messages?: unknown;
+  text?: string;
+};
+
+type PromoBannerResponse = {
+  promoBanner?: PromoBannerState | null;
+};
+
+type BootstrapResponse = {
+  games?: Game[];
+  updatedAt?: string;
+  prediction?: TodayPrediction | null;
+  socialProof?: SocialProofResponse;
+  siteCopy?: Partial<SiteCopy>;
+  promoBanner?: PromoBannerState | null;
+};
+
 function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number, externalSignal?: AbortSignal): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -146,7 +169,7 @@ export default function HomePage() {
         return null;
       }
 
-      const body = await jsonWithTimeout(response, GAMES_FETCH_TIMEOUT_MS);
+      const body = await jsonWithTimeout<GamesResponse>(response, GAMES_FETCH_TIMEOUT_MS);
       if (!body) {
         return null;
       }
@@ -228,10 +251,18 @@ export default function HomePage() {
         setIsBoardLoading(false);
 
         const [predictionBody, socialProofBody, siteCopyBody, promoBannerBody] = await Promise.all([
-          predictionResponse?.ok ? jsonWithTimeout(predictionResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null) : Promise.resolve(null),
-          socialProofResponse?.ok ? jsonWithTimeout(socialProofResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null) : Promise.resolve(null),
-          siteCopyResponse?.ok ? jsonWithTimeout(siteCopyResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null) : Promise.resolve(null),
-          promoBannerResponse?.ok ? jsonWithTimeout(promoBannerResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null) : Promise.resolve(null),
+          predictionResponse?.ok
+            ? jsonWithTimeout<TodayPrediction>(predictionResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null)
+            : Promise.resolve(null),
+          socialProofResponse?.ok
+            ? jsonWithTimeout<SocialProofResponse>(socialProofResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null)
+            : Promise.resolve(null),
+          siteCopyResponse?.ok
+            ? jsonWithTimeout<Partial<SiteCopy>>(siteCopyResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null)
+            : Promise.resolve(null),
+          promoBannerResponse?.ok
+            ? jsonWithTimeout<PromoBannerResponse>(promoBannerResponse, FALLBACK_FETCH_TIMEOUT_MS).catch(() => null)
+            : Promise.resolve(null),
         ]);
 
         if (signal.aborted) return;
@@ -265,7 +296,7 @@ export default function HomePage() {
         if (!bootstrapResponse?.ok) {
           await fallbackInit();
         } else {
-          const bootstrap = await jsonWithTimeout(bootstrapResponse, BOOTSTRAP_TIMEOUT_MS).catch(() => null);
+          const bootstrap = await jsonWithTimeout<BootstrapResponse>(bootstrapResponse, BOOTSTRAP_TIMEOUT_MS).catch(() => null);
           if (signal.aborted) return;
 
           if (!bootstrap) {

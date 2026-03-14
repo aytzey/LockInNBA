@@ -40,21 +40,22 @@ export default function GameCard({ game, onOpenChat, promoActive = false }: Game
     >
       <div className="flex items-start justify-between gap-3 md:gap-4">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 md:gap-3">
-            <div className="game-card__logos">
+          <div className="game-card__identity-row">
+            <div className="game-card__identity-team">
               <img src={game.awayLogo} alt="" className="game-card__logo" loading="lazy" />
+              <span className="heading game-card__identity-code">{game.awayTeam}</span>
+            </div>
+            <span className="game-card__identity-separator">@</span>
+            <div className="game-card__identity-team">
               <img src={game.homeLogo} alt="" className="game-card__logo" loading="lazy" />
+              <span className="heading game-card__identity-code">{game.homeTeam}</span>
             </div>
-            <div className="min-w-0">
-              <div className="heading truncate text-[1.05rem] text-[color:var(--pure-white)] md:text-[1.3rem]">
-                {game.awayTeam} <span className="text-[color:var(--silver-gray)]">@</span> {game.homeTeam}
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-[color:var(--silver-gray)] md:mt-2 md:gap-3 md:text-[11px]">
-                <span>{formatEstTime(game.gameTimeEST)}</span>
-                <span className="text-[color:var(--line-strong)]">•</span>
-                <span>via {game.oddsSource}</span>
-              </div>
-            </div>
+          </div>
+
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-[color:var(--silver-gray)] md:mt-2 md:gap-3 md:text-[11px]">
+            <span>{formatEstTime(game.gameTimeEST)}</span>
+            <span className="text-[color:var(--line-strong)]">•</span>
+            <span>via {game.oddsSource}</span>
           </div>
         </div>
 
@@ -64,14 +65,17 @@ export default function GameCard({ game, onOpenChat, promoActive = false }: Game
         </span>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 md:mt-5 md:gap-3">
-        <div className="game-card__moneyline">
-          <span className="game-card__team-label">{game.awayTeam}</span>
-          <span className="game-card__moneyline-value">{moneyline(game.awayMoneyline)}</span>
-        </div>
-        <div className="game-card__moneyline">
-          <span className="game-card__team-label">{game.homeTeam}</span>
-          <span className="game-card__moneyline-value">{moneyline(game.homeMoneyline)}</span>
+      <div className="mt-3 md:mt-5">
+        <div className="game-card__market-row">
+          <div className="game-card__market-entry">
+            <span className="game-card__market-team">{game.awayTeam}</span>
+            <span className="game-card__market-value">{moneyline(game.awayMoneyline)}</span>
+          </div>
+          <span className="game-card__market-divider">|</span>
+          <div className="game-card__market-entry game-card__market-entry--right">
+            <span className="game-card__market-team">{game.homeTeam}</span>
+            <span className="game-card__market-value">{moneyline(game.homeMoneyline)}</span>
+          </div>
         </div>
       </div>
 
@@ -90,10 +94,7 @@ export default function GameCard({ game, onOpenChat, promoActive = false }: Game
         </div>
       ) : null}
 
-      <div className="mt-3 flex items-center justify-between border-t border-[color:var(--line)] pt-3 md:mt-5 md:pt-4">
-        <span className="hidden text-[10px] tracking-[0.08em] text-[color:var(--silver-gray)] md:inline">
-          {game.spread} · O/U {game.total}
-        </span>
+      <div className="mt-3 flex items-center justify-end border-t border-[color:var(--line)] pt-3 md:mt-5 md:pt-4">
         <span className="game-card__cta">{promoActive ? "Ask AI Free" : "Ask AI"}</span>
       </div>
     </button>
