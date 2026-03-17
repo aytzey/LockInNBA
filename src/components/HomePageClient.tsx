@@ -591,8 +591,6 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
           isPromoActive={isPromoActive}
         />
 
-        <TrackRecord markdown={siteCopy.trackRecordMarkdown} />
-
         <section ref={gameSectionRef} className="space-y-4 md:space-y-6">
           <div className="flex flex-wrap items-end justify-between gap-3 md:gap-4">
             <div className="space-y-1 md:space-y-2">
@@ -664,6 +662,8 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
             </div>
           )}
         </section>
+
+        <TrackRecord markdown={siteCopy.trackRecordMarkdown} />
 
         <RestoreAccess onRestore={unlockDailyPrediction} footerDisclaimer={siteCopy.footerDisclaimer} />
 

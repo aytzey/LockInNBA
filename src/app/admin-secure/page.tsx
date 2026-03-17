@@ -218,6 +218,8 @@ export default function AdminSecurePage() {
   const [savedSlates, setSavedSlates] = useState<DailySlateSummary[]>([]);
   const [predictionPreview, setPredictionPreview] = useState<DailyEdgePreview | null>(null);
   const [autoTrackRecordMarkdown, setAutoTrackRecordMarkdown] = useState("");
+  const [trackRecordDraft, setTrackRecordDraft] = useState("");
+  const [trackRecordMessage, setTrackRecordMessage] = useState("");
   const [isNoEdgeDay, setIsNoEdgeDay] = useState(false);
   const [predictionMessage, setPredictionMessage] = useState("");
   const [predictionSaving, setPredictionSaving] = useState(false);
@@ -379,6 +381,11 @@ export default function AdminSecurePage() {
         footerDisclaimer: siteCopyBody.siteCopy?.footerDisclaimer || DEFAULT_SITE_COPY.footerDisclaimer,
         trackRecordMarkdown: siteCopyBody.siteCopy?.trackRecordMarkdown || DEFAULT_SITE_COPY.trackRecordMarkdown,
       });
+      setTrackRecordDraft(
+        siteCopyBody.siteCopy?.trackRecordMarkdown ||
+        dailyPicksBody.trackRecordMarkdown ||
+        "",
+      );
       setPromoBanner({
         isActive: promoBody.promoBanner?.isActive ?? DEFAULT_PROMO_BANNER.isActive,
         bannerText: promoBody.promoBanner?.bannerText || DEFAULT_PROMO_BANNER.bannerText,
@@ -605,6 +612,35 @@ export default function AdminSecurePage() {
       setSiteCopyMessage("Site copy updated.");
     } catch {
       setSiteCopyMessage("Update failed due to network error.");
+    }
+  }
+
+  async function saveTrackRecord() {
+    if (!token) return;
+
+    setTrackRecordMessage("");
+    try {
+      const payload = { ...siteCopy, trackRecordMarkdown: trackRecordDraft };
+      const res = await fetch("/api/admin/site-copy", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...addAuthHeader(token),
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTrackRecordMessage(data.message || "Update failed.");
+        return;
+      }
+
+      const saved = data.siteCopy?.trackRecordMarkdown || "";
+      setSiteCopy((prev) => ({ ...prev, trackRecordMarkdown: saved }));
+      setTrackRecordDraft(saved);
+      setTrackRecordMessage("Track record saved.");
+    } catch {
+      setTrackRecordMessage("Update failed due to network error.");
     }
   }
 
@@ -1181,35 +1217,57 @@ export default function AdminSecurePage() {
 
             <div className="space-y-5 p-6">
               <p className="admin-help">
-                Track record now builds automatically from saved daily picks once each pick has `result` and `profitUnits`.
-                PASS days come from dates saved as No Edge.
+                Edit the track record markdown below. Use &quot;Load Auto&quot; to populate from daily pick results, then adjust as needed.
               </p>
 
               <div className="grid gap-4 xl:grid-cols-2">
-                <div>
-                  <label className="input-label" htmlFor="track-record-markdown">Auto-generated markdown</label>
+                <div className="space-y-2">
+                  <label className="input-label" htmlFor="track-record-markdown">Track record markdown</label>
                   <textarea
                     id="track-record-markdown"
-                    value={autoTrackRecordMarkdown || siteCopy.trackRecordMarkdown}
-                    readOnly
+                    value={trackRecordDraft}
+                    onChange={(e) => setTrackRecordDraft(e.target.value)}
                     rows={18}
                     className="input-field mono mt-2 resize-y text-sm"
-                    placeholder="Track record will appear here after you log results on completed picks."
+                    placeholder="Enter track record lines here..."
                   />
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={saveTrackRecord} className="primary-button justify-center">
+                      Save Track Record
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button justify-center"
+                      onClick={() => {
+                        if (autoTrackRecordMarkdown) {
+                          setTrackRecordDraft(autoTrackRecordMarkdown);
+                        }
+                      }}
+                      disabled={!autoTrackRecordMarkdown}
+                    >
+                      Load Auto
+                    </button>
+                  </div>
                 </div>
 
                 <div>
                   <label className="input-label">Preview</label>
                   <div className="mt-2">
                     <TrackRecord
-                      markdown={autoTrackRecordMarkdown || siteCopy.trackRecordMarkdown}
+                      markdown={trackRecordDraft}
                       showHeading={false}
                       defaultExpanded
-                      emptyMessage="Track record preview populates automatically once results are entered."
+                      emptyMessage="Track record preview will appear here."
                     />
                   </div>
                 </div>
               </div>
+
+              {trackRecordMessage ? (
+                <p className={`admin-message ${trackRecordMessage.toLowerCase().includes("fail") ? "admin-message--error" : "admin-message--success"}`}>
+                  {trackRecordMessage}
+                </p>
+              ) : null}
             </div>
           </section>
         ) : null}

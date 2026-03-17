@@ -320,20 +320,6 @@ export default function ChatModal({
     };
   }
 
-  async function ensureChatPaid() {
-    try {
-      const unlocked = await unlockChatRoom();
-      if (unlocked?.session?.isPaid) {
-        inputRef.current?.focus();
-      }
-    } catch (error) {
-      if (!validateEmail(leadEmail.trim().toLowerCase())) {
-        setShowEmailCapture(true);
-      }
-      setChatError(error instanceof Error ? error.message : "Payment failed");
-    }
-  }
-
   async function purchaseExtra() {
     if (!chatSession) {
       setChatError("Chat session unavailable.");
@@ -441,7 +427,6 @@ export default function ChatModal({
   const isPaid = chatSession?.isPaid ?? false;
   const questionLimit = chatSession?.questionLimit ?? 0;
   const canSend = !isInitializing && !isChatBusy && (!isPaid || chatQuestionsRemaining > 0);
-  const showPaywall = !isPaid || chatQuestionsRemaining <= 0;
 
   return (
     <motion.div
@@ -612,67 +597,37 @@ export default function ChatModal({
             <span className={`mono rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] ${
               isPaid
                 ? "border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)] text-[color:var(--money-green)]"
-                : promoActive
-                  ? "border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)] text-[color:var(--money-green)]"
-                  : "border border-[color:var(--gold-line)] bg-[color:var(--gold-soft)] text-[color:var(--gold)]"
+                : "border border-[color:var(--line)] bg-[color:var(--panel-soft)] text-[color:var(--silver-gray)]"
             }`}>
-              {isPaid ? "Active Room" : promoActive ? "Free This Week" : "Locked Room"}
+              {isPaid ? "Active Room" : promoActive ? "Free This Week" : "AI Analysis"}
             </span>
             <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-3 py-1 text-right text-[10px] uppercase tracking-[0.16em] text-[color:var(--silver-gray)]">
               {questionLimit > 0
-                ? `${game.awayTeam} @ ${game.homeTeam} • ${chatQuestionsRemaining}/${questionLimit} questions remaining`
-                : `${game.awayTeam} @ ${game.homeTeam} • 3 questions included`}
+                ? `${game.awayTeam} @ ${game.homeTeam} • ${chatQuestionsRemaining}/${questionLimit} left`
+                : `${game.awayTeam} @ ${game.homeTeam} • 3 questions per session`}
             </span>
           </div>
 
-          {showPaywall && (
+          {isPaid && chatQuestionsRemaining <= 0 && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="chat-paywall"
             >
-              {!isPaid ? (
-                <>
-                  <div className="chat-paywall__copy">
-                    <div className="chat-paywall__eyebrow">{promoActive ? "Launch Week Unlock" : "Deep Analysis Unlock"}</div>
-                    <p className="chat-paywall__title">
-                      Discuss {game.awayTeam} @ {game.homeTeam} with AI.
-                    </p>
-                    <p className="chat-paywall__body">
-                      {promoActive
-                        ? "Write your question first, hit Send, then drop your email to unlock free launch access for this matchup."
-                        : "Write your question first. When you're ready, continue with email and unlock 3 questions for this specific matchup for $2."}
-                    </p>
-                  </div>
-
-                  <motion.button
-                    type="button"
-                    onClick={ensureChatPaid}
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="primary-button w-full justify-center"
-                  >
-                    {promoActive ? "Continue With Email" : "Unlock This Room"}
-                  </motion.button>
-                </>
-              ) : (
-                <>
-                  <div className="chat-paywall__copy">
-                    <div className="chat-paywall__eyebrow">Question Limit Reached</div>
-                    <p className="chat-paywall__title">Need more depth?</p>
-                    <p className="chat-paywall__body">Add 3 more questions for this game for $1 and keep this room active.</p>
-                  </div>
-                  <motion.button
-                    type="button"
-                    onClick={purchaseExtra}
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="secondary-button w-full justify-center"
-                  >
-                    +3 more questions for this game — $1
-                  </motion.button>
-                </>
-              )}
+              <div className="chat-paywall__copy">
+                <div className="chat-paywall__eyebrow">Question Limit Reached</div>
+                <p className="chat-paywall__title">Need more depth?</p>
+                <p className="chat-paywall__body">Add 3 more questions for this game for $1 and keep this room active.</p>
+              </div>
+              <motion.button
+                type="button"
+                onClick={purchaseExtra}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                className="secondary-button w-full justify-center"
+              >
+                +3 more questions for this game — $1
+              </motion.button>
             </motion.div>
           )}
 
@@ -753,7 +708,7 @@ export default function ChatModal({
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
-                Send
+                Ask AI
               </motion.button>
             </div>
             {!canSend && (

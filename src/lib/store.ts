@@ -18,7 +18,7 @@ import {
 } from "./types";
 import { fetchTodayGames, mergeLatestGames } from "./nba";
 import { getEstDateKey } from "./time";
-import { extractTrackRecordSummary, parseTrackRecordMarkdown } from "./track-record";
+import { extractTrackRecordSummary } from "./track-record";
 
 interface CheckoutSession {
   id: string;
@@ -1191,21 +1191,13 @@ export async function buildAutomaticTrackRecordMarkdown(limit = 21): Promise<str
 }
 
 export async function getResolvedTrackRecordMarkdown(): Promise<string> {
-  const [automaticMarkdown, siteCopy] = await Promise.all([
-    buildAutomaticTrackRecordMarkdown(),
-    getSiteCopy(),
-  ]);
+  const siteCopy = await getSiteCopy();
 
-  if (automaticMarkdown) {
-    const automaticRecord = parseTrackRecordMarkdown(automaticMarkdown);
-    const hasDecidedResults = automaticRecord.entries.some((entry) => entry.outcome === "win" || entry.outcome === "loss");
-
-    if (hasDecidedResults || !siteCopy.trackRecordMarkdown.trim()) {
-      return automaticMarkdown;
-    }
+  if (siteCopy.trackRecordMarkdown.trim()) {
+    return siteCopy.trackRecordMarkdown;
   }
 
-  return siteCopy.trackRecordMarkdown;
+  return buildAutomaticTrackRecordMarkdown();
 }
 
 export async function getUnlockedDailyEdge(date = getEstDateKey()): Promise<{
