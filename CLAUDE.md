@@ -13,6 +13,10 @@ Additional context lives here:
 - `docs/ai/operations-and-deploy.md`
 - `docs/ai/change-playbook.md`
 
+Design context:
+
+- `.impeccable.md` — brand personality, aesthetic direction, design principles
+
 Path-specific memory files:
 
 - `src/lib/CLAUDE.md`

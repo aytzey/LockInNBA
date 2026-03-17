@@ -440,7 +440,7 @@ export default function ChatModal({
       style={{ backdropFilter: "blur(10px)" }}
     >
       <motion.div
-        className="relative flex max-h-[95dvh] w-full flex-col overflow-hidden rounded-t-[1.5rem] border border-[color:var(--line-strong)] bg-[color:var(--panel-strong)] shadow-[0_32px_80px_rgba(0,0,0,0.5)] md:max-h-[88vh] md:max-w-3xl md:rounded-[2rem]"
+        className="relative flex h-[100dvh] w-full flex-col overflow-hidden border border-[color:var(--line-strong)] bg-[color:var(--panel-strong)] shadow-[0_32px_80px_rgba(0,0,0,0.5)] md:h-auto md:max-h-[88vh] md:max-w-3xl md:rounded-[2rem]"
         initial={{ opacity: 0, y: 60, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 40, scale: 0.97 }}
@@ -593,18 +593,14 @@ export default function ChatModal({
             </motion.p>
           )}
 
-          <div className="mb-3 flex items-center justify-between gap-3 text-xs">
-            <span className={`mono rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] ${
-              isPaid
-                ? "border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)] text-[color:var(--money-green)]"
-                : "border border-[color:var(--line)] bg-[color:var(--panel-soft)] text-[color:var(--silver-gray)]"
-            }`}>
+          <div className="mb-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.14em] text-[color:var(--silver-gray)] md:mb-3">
+            <span className={`mono ${isPaid ? "text-[color:var(--money-green)]" : ""}`}>
               {isPaid ? "Active Room" : promoActive ? "Free This Week" : "AI Analysis"}
             </span>
-            <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-3 py-1 text-right text-[10px] uppercase tracking-[0.16em] text-[color:var(--silver-gray)]">
+            <span className="mono">
               {questionLimit > 0
-                ? `${game.awayTeam} @ ${game.homeTeam} • ${chatQuestionsRemaining}/${questionLimit} left`
-                : `${game.awayTeam} @ ${game.homeTeam} • 3 questions per session`}
+                ? `${chatQuestionsRemaining}/${questionLimit} left`
+                : "3 questions per session"}
             </span>
           </div>
 
@@ -694,8 +690,8 @@ export default function ChatModal({
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
                 }}
                 disabled={isInitializing || (isPaid && chatQuestionsRemaining <= 0)}
-                rows={2}
-                className="input-field min-h-[88px] flex-1 resize-none disabled:opacity-40"
+                rows={1}
+                className="input-field min-h-[44px] flex-1 resize-none disabled:opacity-40"
               />
               <motion.button
                 type="button"
@@ -704,6 +700,7 @@ export default function ChatModal({
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 className="primary-button shrink-0"
+                aria-label="Send message"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

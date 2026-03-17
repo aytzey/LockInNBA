@@ -70,7 +70,7 @@ export default function TrackRecord({
           </div>
         ) : null}
 
-        <div className="space-y-2 px-4 py-4 md:px-5 md:py-5">
+        <div className="divide-y divide-[color:var(--line)] px-4 py-2 md:px-5 md:py-3">
           {visibleEntries.map((entry) => (
             <TrackRecordRow key={entry.id} entry={entry} />
           ))}
@@ -106,7 +106,7 @@ function TrackRecordRow({ entry }: { entry: TrackRecordEntry }) {
         : "text-[color:var(--silver-gray)]";
 
   return (
-    <div className="grid grid-cols-[auto_1fr] gap-3 rounded-[1rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-3 py-3 md:grid-cols-[auto_1fr_auto] md:items-start">
+    <div className="grid grid-cols-[auto_1fr] gap-3 px-1 py-3 md:grid-cols-[auto_1fr_auto] md:items-start">
       <span className={`mt-0.5 text-sm ${tone}`} aria-hidden="true">
         {entry.outcome === "win" ? "W" : entry.outcome === "loss" ? "L" : entry.outcome === "pass" ? "P" : "-"}
       </span>

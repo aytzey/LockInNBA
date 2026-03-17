@@ -11,7 +11,7 @@ export default function SocialProofBanner({ messages }: SocialProofBannerProps) 
   const duration = Math.max(34, items.length * 14);
 
   return (
-    <section className="social-banner fade-in" style={{ ["--ticker-duration" as string]: `${duration}s` }}>
+    <section className="social-banner fade-in" role="marquee" aria-label="Social proof" style={{ ["--ticker-duration" as string]: `${duration}s` }}>
       <div className="social-banner__edge social-banner__edge--left" />
       <div className="social-banner__edge social-banner__edge--right" />
       <div className="social-banner__track">

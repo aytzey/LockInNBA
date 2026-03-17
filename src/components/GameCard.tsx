@@ -33,10 +33,9 @@ export default function GameCard({ game, onOpenChat, promoActive = false }: Game
   const showScore = game.status !== "upcoming" && game.awayScore !== null && game.homeScore !== null;
 
   return (
-    <button
-      type="button"
-      onClick={() => onOpenChat(game)}
-      className="game-card focus-ring"
+    <div
+      className="game-card"
+      aria-label={`${game.awayTeam} at ${game.homeTeam} matchup`}
     >
       <div className="flex items-start justify-between gap-3 md:gap-4">
         <div className="min-w-0 flex-1">
@@ -81,7 +80,7 @@ export default function GameCard({ game, onOpenChat, promoActive = false }: Game
 
       {showScore ? (
         <div className="mt-3 grid gap-1.5 rounded-[0.85rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-3 py-2.5 md:mt-4 md:gap-2 md:rounded-[1rem] md:px-4 md:py-3">
-          <div className="flex items-center justify-between text-[9px] uppercase tracking-[0.18em] text-[color:var(--silver-gray)] md:text-[10px]">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-[color:var(--silver-gray)] md:text-[11px]">
             <span>{game.status === "live" ? game.statusDetail : "Final score"}</span>
             <span>{game.status === "live" ? "Live" : "Final"}</span>
           </div>
@@ -95,8 +94,15 @@ export default function GameCard({ game, onOpenChat, promoActive = false }: Game
       ) : null}
 
       <div className="mt-3 flex items-center justify-end border-t border-[color:var(--line)] pt-3 md:mt-5 md:pt-4">
-        <span className="game-card__cta">{promoActive ? "Ask AI — Free This Week" : "Ask AI"}</span>
+        <button
+          type="button"
+          onClick={() => onOpenChat(game)}
+          aria-label={`Ask AI about ${game.awayTeam} at ${game.homeTeam}`}
+          className="game-card__cta focus-ring"
+        >
+          {promoActive ? "Ask AI — Free This Week" : "Ask AI · 3 Questions"}
+        </button>
       </div>
-    </button>
+    </div>
   );
 }

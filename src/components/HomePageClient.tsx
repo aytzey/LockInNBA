@@ -576,6 +576,8 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
 
         <SocialProofBanner messages={effectiveSocialProofMessages} />
 
+        <TrackRecord markdown={siteCopy.trackRecordMarkdown} />
+
         <TonightsEdge
           prediction={todayPrediction}
           isLoading={isBoardLoading && !dailyUnlocked}
@@ -604,7 +606,7 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
             </div>
             <div className="mono inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] text-[color:var(--silver-gray)] md:text-[11px]">
               <span className={`inline-block h-1.5 w-1.5 rounded-full ${lastUpdatedLabel ? "bg-[color:var(--money-green)]" : "bg-[color:var(--gold)] animate-pulse"}`} />
-              {lastUpdatedLabel ? `Updated ${lastUpdatedLabel} ET` : "Board refreshes at tip-off"}
+              {lastUpdatedLabel ? `Updated ${lastUpdatedLabel}` : "Board refreshes at tip-off"}
             </div>
           </div>
 
@@ -662,8 +664,6 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
             </div>
           )}
         </section>
-
-        <TrackRecord markdown={siteCopy.trackRecordMarkdown} />
 
         <RestoreAccess onRestore={unlockDailyPrediction} footerDisclaimer={siteCopy.footerDisclaimer} />
 

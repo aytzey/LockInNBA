@@ -15,7 +15,7 @@ export default function Header({ note = "" }: HeaderProps) {
 
         <div className="site-header__meta text-right">
           <div className="site-header__date mono">
-            {todayEstLabel()} ET
+            {todayEstLabel()}
           </div>
           {note ? (
             <div className="site-header__note">
