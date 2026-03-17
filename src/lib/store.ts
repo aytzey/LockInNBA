@@ -16,8 +16,9 @@ import {
   SocialProofBanner,
   SystemPrompt,
 } from "./types";
+import { fetchTodayGames, mergeLatestGames } from "./nba";
 import { getEstDateKey } from "./time";
-import { extractTrackRecordSummary } from "./track-record";
+import { extractTrackRecordSummary, parseTrackRecordMarkdown } from "./track-record";
 
 interface CheckoutSession {
   id: string;
@@ -33,6 +34,12 @@ interface CheckoutSession {
 interface DataRefreshState {
   key: string;
   updatedAt: string;
+}
+
+interface TrackRecordResolvedEntry {
+  line: string;
+  result: "win" | "loss";
+  profitUnits: number | null;
 }
 
 export const DEFAULT_SOCIAL_PROOF_TEXT = "This Week: 5-0 (100%) | +19.3u ROI";
@@ -415,6 +422,187 @@ function groupByDate<T extends { date: string }>(items: T[]): Map<string, T[]> {
   return groups;
 }
 
+function groupGamesByDate(items: Game[]): Map<string, Game[]> {
+  return groupByDate(items);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeLookupText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildTeamAliases(displayName: string, abbreviation: string): string[] {
+  const normalizedDisplayName = normalizeLookupText(displayName);
+  const normalizedAbbreviation = normalizeLookupText(abbreviation);
+  const displayTokens = normalizedDisplayName.split(" ").filter(Boolean);
+  const aliases = new Set<string>();
+
+  if (normalizedAbbreviation) {
+    aliases.add(normalizedAbbreviation);
+  }
+
+  if (normalizedDisplayName) {
+    aliases.add(normalizedDisplayName);
+  }
+
+  for (let size = 1; size <= 3; size += 1) {
+    if (displayTokens.length >= size) {
+      aliases.add(displayTokens.slice(-size).join(" "));
+    }
+  }
+
+  return [...aliases].filter((alias) => alias.length >= 2);
+}
+
+function countMatches(text: string, pattern: string): number {
+  const regex = new RegExp(pattern, "gi");
+  let count = 0;
+
+  while (regex.exec(text)) {
+    count += 1;
+  }
+
+  return count;
+}
+
+function scoreTeamMention(text: string, aliases: string[]): number {
+  return aliases.reduce((score, alias) => {
+    const escaped = escapeRegExp(alias);
+    const mentionWeight = alias.length <= 3 ? 0.25 : 1;
+
+    return score
+      + (countMatches(text, `\\b${escaped}\\s+ml\\b`) * 12)
+      + (countMatches(text, `\\b${escaped}\\b[^\\n.!?]{0,80}\\bmoneyline\\b`) * 8)
+      + (countMatches(text, `\\b${escaped}\\b[^\\n.!?]{0,80}\\bhold(?:s)?\\b`) * 6)
+      + (countMatches(text, `\\bonly actionable[^\\n.!?]{0,80}\\b${escaped}\\b`) * 6)
+      + (countMatches(text, `\\bthe\\s+${escaped}\\b`) * 4)
+      + (countMatches(text, `\\b${escaped}\\b`) * mentionWeight);
+  }, 0);
+}
+
+function extractExplicitProfitUnits(text: string): number | null {
+  const match = text.match(/([+-]\d+(?:\.\d+)?)u\b/i);
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isGameFinal(game: Game): boolean {
+  if (game.status === "final") {
+    return true;
+  }
+
+  return game.awayScore !== null
+    && game.homeScore !== null
+    && (game.awayScore > 0 || game.homeScore > 0);
+}
+
+function inferLegacyPredictionPick(
+  prediction: DailyPrediction,
+  games: Game[],
+): { game: Game; pickedSide: "away" | "home" } | null {
+  if (games.length === 0) {
+    return null;
+  }
+
+  const text = normalizeLookupText(
+    [
+      prediction.teaserText,
+      prediction.markdownContent
+        .split(/\r?\n/)
+        .filter((line) => !line.trim().startsWith("### "))
+        .join("\n"),
+    ].filter(Boolean).join("\n"),
+  );
+
+  if (!text) {
+    return null;
+  }
+
+  const candidates = games
+    .flatMap((game) => {
+      const awayAliases = buildTeamAliases(game.awayDisplayName, game.awayTeam);
+      const homeAliases = buildTeamAliases(game.homeDisplayName, game.homeTeam);
+
+      return [
+        {
+          game,
+          pickedSide: "away" as const,
+          score: scoreTeamMention(text, awayAliases),
+        },
+        {
+          game,
+          pickedSide: "home" as const,
+          score: scoreTeamMention(text, homeAliases),
+        },
+      ];
+    })
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  const bestCandidate = candidates[0];
+  if (!bestCandidate) {
+    return null;
+  }
+
+  const secondCandidate = candidates[1];
+  if (secondCandidate && bestCandidate.score <= secondCandidate.score) {
+    return null;
+  }
+
+  return {
+    game: bestCandidate.game,
+    pickedSide: bestCandidate.pickedSide,
+  };
+}
+
+function resolveLegacyPredictionTrackRecordEntry(
+  prediction: DailyPrediction,
+  games: Game[],
+): TrackRecordResolvedEntry | null {
+  const inferredPick = inferLegacyPredictionPick(prediction, games);
+  if (!inferredPick || !isGameFinal(inferredPick.game)) {
+    return null;
+  }
+
+  const { game, pickedSide } = inferredPick;
+  if (game.awayScore === null || game.homeScore === null || game.awayScore === game.homeScore) {
+    return null;
+  }
+
+  const pickedTeam = pickedSide === "away" ? game.awayTeam : game.homeTeam;
+  const pickedMoneyline = pickedSide === "away" ? game.awayMoneyline : game.homeMoneyline;
+  const pickedWon = pickedSide === "away" ? game.awayScore > game.homeScore : game.homeScore > game.awayScore;
+  const matchup = pickedSide === "away"
+    ? `**${game.awayTeam}** @ ${game.homeTeam}`
+    : `${game.awayTeam} @ **${game.homeTeam}**`;
+  const profitUnits = extractExplicitProfitUnits(prediction.markdownContent)
+    ?? extractExplicitProfitUnits(prediction.teaserText);
+
+  return {
+    line: [
+      formatTrackRecordDate(prediction.date),
+      matchup,
+      `${pickedTeam} ${formatMoneyline(pickedMoneyline)}`,
+      `${pickedWon ? "W" : "L"} (${game.awayScore}-${game.homeScore})`,
+      formatProfitUnits(profitUnits),
+    ].filter(Boolean).join(" · "),
+    result: pickedWon ? "win" : "loss",
+    profitUnits,
+  };
+}
+
 function amountForPayment(type: "daily_pick" | "match_chat" | "extra_questions"): number {
   if (type === "daily_pick") return 5;
   if (type === "match_chat") return 2;
@@ -464,6 +652,22 @@ export async function getTodayPrediction(date = getEstDateKey()): Promise<DailyP
 
 export async function listPredictions(): Promise<DailyPrediction[]> {
   const result = await query(`SELECT * FROM predictions ORDER BY date DESC`);
+  return result.rows.map((row) => mapPrediction(row as Record<string, RowValue>));
+}
+
+async function listPredictionsForDates(dates: string[]): Promise<DailyPrediction[]> {
+  if (dates.length === 0) {
+    return [];
+  }
+
+  const result = await query(
+    `SELECT *
+     FROM predictions
+     WHERE date = ANY($1::text[])
+     ORDER BY date DESC`,
+    [dates],
+  );
+
   return result.rows.map((row) => mapPrediction(row as Record<string, RowValue>));
 }
 
@@ -691,6 +895,22 @@ export async function listDailyPicksWithGamesForDates(dates: string[]): Promise<
   return result.rows.map((row) => mapDailyPickWithGame(row as Record<string, RowValue>));
 }
 
+async function listGamesForDates(dates: string[]): Promise<Game[]> {
+  if (dates.length === 0) {
+    return [];
+  }
+
+  const result = await query(
+    `SELECT *
+     FROM games
+     WHERE date = ANY($1::text[])
+     ORDER BY date DESC, CASE WHEN status = 'final' THEN 1 ELSE 0 END ASC, game_time_est ASC`,
+    [dates],
+  );
+
+  return result.rows.map((row) => mapGame(row as Record<string, RowValue>));
+}
+
 export async function getPublicDailyEdgePreview(date = getEstDateKey()): Promise<DailyEdgePreview> {
   const [prediction, picks] = await Promise.all([
     getTodayPrediction(date).catch(() => null),
@@ -710,6 +930,24 @@ export async function listDailySlateSummaries(limit = 21): Promise<DailySlateSum
      FROM predictions p
      LEFT JOIN daily_picks dp ON dp.date = p.date
      WHERE p.source = 'admin'
+     GROUP BY p.date, p.is_no_edge_day, p.updated_at
+     ORDER BY p.date DESC
+     LIMIT $1`,
+    [limit],
+  );
+
+  return result.rows.map((row) => mapSlateSummary(row as Record<string, RowValue>));
+}
+
+async function listTrackRecordSlateSummaries(limit = 21): Promise<DailySlateSummary[]> {
+  const result = await query(
+    `SELECT
+       p.date,
+       p.is_no_edge_day,
+       p.updated_at,
+       COUNT(dp.id) AS pick_count
+     FROM predictions p
+     LEFT JOIN daily_picks dp ON dp.date = p.date
      GROUP BY p.date, p.is_no_edge_day, p.updated_at
      ORDER BY p.date DESC
      LIMIT $1`,
@@ -828,32 +1066,83 @@ export async function saveDailyPickSlate(
 }
 
 export async function buildAutomaticTrackRecordMarkdown(limit = 21): Promise<string> {
-  const slates = await listDailySlateSummaries(limit);
+  const slates = await listTrackRecordSlateSummaries(limit);
   if (slates.length === 0) {
     return "";
   }
 
-  const picks = await listDailyPicksWithGamesForDates(slates.map((slate) => slate.date));
+  const dates = slates.map((slate) => slate.date);
+  const [picks, predictions, games] = await Promise.all([
+    listDailyPicksWithGamesForDates(dates),
+    listPredictionsForDates(dates),
+    listGamesForDates(dates),
+  ]);
   const picksByDate = groupByDate(picks);
+  const predictionsByDate = new Map(predictions.map((prediction) => [prediction.date, prediction]));
+  const gamesByDate = groupGamesByDate(games);
   const weeklyCutoff = getEstDateKey(new Date(Date.now() - (6 * 24 * 60 * 60 * 1000)));
 
   let wins = 0;
   let losses = 0;
   let totalUnits = 0;
+  let weeklyResolvedUnits = 0;
   const lines: string[] = [];
+  const legacyDatesNeedingRefresh = slates
+    .filter((slate) => {
+      const hasDailyPickRows = (picksByDate.get(slate.date) || []).length > 0;
+      const prediction = predictionsByDate.get(slate.date);
+
+      return !hasDailyPickRows && Boolean(prediction && !prediction.isNoEdgeDay);
+    })
+    .map((slate) => slate.date);
+
+  if (legacyDatesNeedingRefresh.length > 0) {
+    const refreshedLegacyGames = await Promise.all(
+      legacyDatesNeedingRefresh.map(async (date) => {
+        const cachedGames = gamesByDate.get(date) || [];
+        const needsRefresh = cachedGames.length === 0 || cachedGames.some((game) => !isGameFinal(game));
+
+        if (!needsRefresh) {
+          return [date, cachedGames] as const;
+        }
+
+        try {
+          const latestGames = await fetchTodayGames(date);
+          return [date, mergeLatestGames(cachedGames, latestGames)] as const;
+        } catch {
+          return [date, cachedGames] as const;
+        }
+      }),
+    );
+
+    for (const [date, refreshedGames] of refreshedLegacyGames) {
+      gamesByDate.set(date, refreshedGames);
+    }
+  }
 
   for (const slate of slates) {
+    const registerWeeklyOutcome = (result: "win" | "loss", profitUnits: number | null) => {
+      if (slate.date < weeklyCutoff) {
+        return;
+      }
+
+      if (result === "win") {
+        wins += 1;
+      } else {
+        losses += 1;
+      }
+
+      if (profitUnits !== null) {
+        totalUnits += profitUnits;
+        weeklyResolvedUnits += 1;
+      }
+    };
+
     const datePicks = picksByDate.get(slate.date) || [];
     const completedLines = datePicks
       .map((pick) => {
-        if (slate.date >= weeklyCutoff && pick.result !== "pending") {
-          if (pick.result === "win") {
-            wins += 1;
-          } else if (pick.result === "loss") {
-            losses += 1;
-          }
-
-          totalUnits += pick.profitUnits ?? 0;
+        if (pick.result !== "pending") {
+          registerWeeklyOutcome(pick.result, pick.profitUnits);
         }
 
         return buildTrackRecordLine(pick);
@@ -863,6 +1152,20 @@ export async function buildAutomaticTrackRecordMarkdown(limit = 21): Promise<str
     if (completedLines.length > 0) {
       lines.push(...completedLines);
       continue;
+    }
+
+    const prediction = predictionsByDate.get(slate.date);
+    if (prediction && !prediction.isNoEdgeDay) {
+      const legacyEntry = resolveLegacyPredictionTrackRecordEntry(
+        prediction,
+        gamesByDate.get(slate.date) || [],
+      );
+
+      if (legacyEntry) {
+        registerWeeklyOutcome(legacyEntry.result, legacyEntry.profitUnits);
+        lines.push(legacyEntry.line);
+        continue;
+      }
     }
 
     if (slate.isNoEdgeDay) {
@@ -877,7 +1180,11 @@ export async function buildAutomaticTrackRecordMarkdown(limit = 21): Promise<str
   const decidedCount = wins + losses;
   const winRate = decidedCount > 0 ? Math.round((wins / decidedCount) * 100) : 0;
   const summary = decidedCount > 0
-    ? `### This Week: ${wins}-${losses} | ${formatProfitUnits(totalUnits) || "+0.0u"} | ${winRate}% Win Rate`
+    ? [
+        `### This Week: ${wins}-${losses}`,
+        weeklyResolvedUnits === decidedCount ? formatProfitUnits(totalUnits) : null,
+        `${winRate}% Win Rate`,
+      ].filter(Boolean).join(" | ")
     : "";
 
   return [summary, ...lines].filter(Boolean).join("\n");
@@ -889,7 +1196,16 @@ export async function getResolvedTrackRecordMarkdown(): Promise<string> {
     getSiteCopy(),
   ]);
 
-  return automaticMarkdown || siteCopy.trackRecordMarkdown;
+  if (automaticMarkdown) {
+    const automaticRecord = parseTrackRecordMarkdown(automaticMarkdown);
+    const hasDecidedResults = automaticRecord.entries.some((entry) => entry.outcome === "win" || entry.outcome === "loss");
+
+    if (hasDecidedResults || !siteCopy.trackRecordMarkdown.trim()) {
+      return automaticMarkdown;
+    }
+  }
+
+  return siteCopy.trackRecordMarkdown;
 }
 
 export async function getUnlockedDailyEdge(date = getEstDateKey()): Promise<{
