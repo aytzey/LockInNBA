@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateMatchResponse } from "@/lib/llm";
 import {
   addChatMessage,
+  consumeChatQuestion,
   getChatMessages,
   getChatSession,
   hasChatCapacity,
-  touchSession,
   getGames,
   getActiveSystemPrompt,
   getMatchMarkdown,
@@ -74,28 +74,38 @@ export async function POST(request: NextRequest) {
   }
 
   const matchMarkdown = await getMatchMarkdown(session.gameId, dateKey);
+  const effectiveEmail = claimedEmail || tokenPayload?.sub || session.email || undefined;
+  const updatedSession = await consumeChatQuestion(sessionId, effectiveEmail);
+
+  if (!updatedSession) {
+    return NextResponse.json(
+      {
+        message: "Question limit reached",
+        requiresPayment: false,
+        questionsRemaining: 0,
+      },
+      { status: 402 },
+    );
+  }
 
   await addChatMessage(sessionId, "user", question);
-  session.questionsUsed += 1;
-  await touchSession(sessionId, {
-    questionsUsed: session.questionsUsed,
-    isPaid: session.isPaid,
-    email: claimedEmail || session.email,
-  });
+  const priorMessages = await getChatMessages(sessionId);
 
   const answer = await generateMatchResponse({
     question,
     game,
     matchMarkdown: matchMarkdown?.markdownContent || "",
-    unlockedPrediction: Boolean(session.isPaid),
+    chatHistory: priorMessages,
+    unlockedPrediction: Boolean(updatedSession.isPaid),
     systemPrompt: (await getActiveSystemPrompt()).content,
+    isFirstAnswer: updatedSession.questionsUsed === 1,
   });
   const assistantMessage = await addChatMessage(sessionId, "assistant", answer);
 
   return NextResponse.json({
     assistantMessage,
     messages: await getChatMessages(sessionId),
-    questionsRemaining: Math.max(0, session.questionLimit - session.questionsUsed),
+    questionsRemaining: Math.max(0, updatedSession.questionLimit - updatedSession.questionsUsed),
     isLocked: !(await hasChatCapacity(sessionId)),
   });
 }

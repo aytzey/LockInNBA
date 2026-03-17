@@ -1,6 +1,6 @@
 import { getEnv, getOptionalEnv } from "./env";
 import { buildDailySlateContext, buildGameContext, buildHeuristicDailyPrediction } from "./nba";
-import { Game } from "./types";
+import { ChatMessage, Game } from "./types";
 
 type ChatRole = "system" | "user" | "assistant";
 
@@ -23,8 +23,10 @@ interface MatchResponseInput {
   question: string;
   game: Game;
   matchMarkdown: string;
+  chatHistory: ChatMessage[];
   unlockedPrediction: boolean;
   systemPrompt: string;
+  isFirstAnswer: boolean;
 }
 
 interface DailyPredictionInput {
@@ -132,26 +134,31 @@ function buildHeuristicMatchResponse(input: MatchResponseInput): string {
     ? "A game-specific engine read is available and should anchor the answer."
     : "No game-specific engine read is available, so stay limited to the live matchup data only.";
 
+  if (!input.isFirstAnswer) {
+    return `${favoriteTeam} still carries the cleaner moneyline case here. ${favoriteLeader} is the usage piece that matters most late, but ${underdogTeam} can still flip the script if pace and shot variance swing. Keep an eye on the spread (${input.game.spread}) and total (${input.game.total}) before pressing it.`;
+  }
+
   return [
-    "## Read",
+    "## THE READ",
     "",
-    `- ${favoriteTeam} is still carrying the stronger market respect on the moneyline while sitting at **${favoriteRecord}**.`,
-    `- The primary usage marker on that side is **${favoriteLeader}**, which matters if the game stays half-court late.`,
-    `- ${underdogTeam} still has a path if pace or variance flips the script, so this is not a blind chase spot.`,
+    `${favoriteTeam} is still carrying the stronger market respect on the moneyline while sitting at **${favoriteRecord}**. ${favoriteLeader} is the usage marker that matters most if this turns half-court late.`,
     "",
-    "## Signal",
+    "## EDGE SIGNAL",
     "",
     `${accessContext} ${engineContext} Based on the current board, the cleaner side is **${favoriteTeam} moneyline**, but only at standard stake sizing.`,
     "",
-    "## Risk",
+    "## RISK CHECK",
     "",
-    `- Spread and total context: ${input.game.spread}, total ${input.game.total}.`,
-    "- Re-check injuries and late line movement before acting, especially if the number starts running away from the open.",
+    `Spread and total context: ${input.game.spread}, total ${input.game.total}. Re-check injuries and late line movement before acting, especially if the number starts running away from the open.`,
   ].join("\n");
 }
 
 export async function generateMatchResponse(input: MatchResponseInput): Promise<string> {
   const hasEngineRead = input.matchMarkdown.trim().length > 0;
+  const recentHistory = input.chatHistory
+    .slice(-6)
+    .map((message) => `${message.role === "assistant" ? "Assistant" : "User"}: ${message.content.trim()}`)
+    .join("\n");
   const systemMessage = [
     input.systemPrompt.trim(),
     "",
@@ -160,8 +167,12 @@ export async function generateMatchResponse(input: MatchResponseInput): Promise<
     "Use only the provided matchup context and market data.",
     "Do not promise outcomes. Do not invent injuries, trends or odds.",
     "Do not mention or compare any other matchup on the slate.",
-    "Respond in tight markdown with the sections `## Read`, `## Signal`, and `## Risk`.",
-    "Keep the answer under 220 words and make the final signal actionable but cautious.",
+    input.isFirstAnswer
+      ? "This is the first answer in the room. Respond in tight markdown with the sections `## THE READ`, `## EDGE SIGNAL`, and `## RISK CHECK`."
+      : "This is a follow-up question. Do not reuse structured section headings. Answer like a sharp analyst in natural conversation.",
+    input.isFirstAnswer
+      ? "Keep the answer under 220 words and make the final signal actionable but cautious."
+      : "Keep the answer under 140 words, direct, natural, and data-backed.",
     hasEngineRead
       ? "A game-specific engine markdown is attached below. Treat it as the only engine note you can use."
       : "No game-specific engine markdown is available. If relevant, briefly note that the engine has not published a detailed read for this matchup.",
@@ -176,6 +187,8 @@ export async function generateMatchResponse(input: MatchResponseInput): Promise<
     hasEngineRead
       ? `Game-specific engine markdown:\n${input.matchMarkdown.trim()}`
       : "Game-specific engine markdown: unavailable.",
+    "",
+    recentHistory ? `Recent chat history:\n${recentHistory}` : "Recent chat history: none.",
     "",
     `Paid daily card active: ${input.unlockedPrediction ? "yes" : "no"}`,
     "Important: answer only from the matchup context above.",

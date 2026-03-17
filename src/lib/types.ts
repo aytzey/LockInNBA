@@ -11,6 +11,38 @@ export interface DailyPrediction {
   updatedAt: string;
 }
 
+export interface DailyPick {
+  id: string;
+  date: string;
+  gameId: string;
+  pickedSide: "away" | "home";
+  analysisMarkdown: string;
+  result: "pending" | "win" | "loss";
+  profitUnits: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DailyPickWithGame extends DailyPick {
+  game: Game | null;
+}
+
+export interface DailyEdgePreview {
+  date: string;
+  status: "pending" | "ready" | "no_edge";
+  hasPrediction: boolean;
+  isNoEdgeDay: boolean;
+  pickCount: number;
+}
+
+export interface DailySlateSummary {
+  date: string;
+  status: "pending" | "ready" | "no_edge";
+  isNoEdgeDay: boolean;
+  pickCount: number;
+  updatedAt: string;
+}
+
 export interface SocialProofBanner {
   id: string;
   messages: string[];
@@ -26,6 +58,7 @@ export interface SiteCopy {
   headerRightText: string;
   metaDescription: string;
   footerDisclaimer: string;
+  trackRecordMarkdown: string;
   updatedAt: string;
 }
 

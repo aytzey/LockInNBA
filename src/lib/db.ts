@@ -3,7 +3,7 @@ import { getOptionalEnv } from "./env";
 
 const DEFAULT_SYSTEM_PROMPT =
   "Sen LOCKIN'ın NBA analiz asistanısın. Veri odaklı ve net konuş. Sadece istatistiksel avantajları göster, kesin sonuç vaadi verme, bahis tavsiyesi olarak yorumlanmaması için dikkatli ol.";
-const SCHEMA_VERSION = 2026031302;
+const SCHEMA_VERSION = 2026031702;
 
 declare global {
   var __lockinDbPool: Pool | undefined;
@@ -96,12 +96,14 @@ async function runSchemaSetup(): Promise<void> {
       header_right_text TEXT NOT NULL DEFAULT '',
       meta_description TEXT NOT NULL DEFAULT 'LOCKIN is a premium AI sports analytics platform delivering nightly NBA moneyline analysis and per-game statistical insights.',
       footer_disclaimer TEXT NOT NULL DEFAULT 'For entertainment purposes only. LOCKIN does not accept wagers or guarantee outcomes. If you or someone you know has a gambling problem, call 1-800-GAMBLER.',
+      track_record_markdown TEXT NOT NULL DEFAULT '',
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
   await pool.query(`ALTER TABLE site_copy ADD COLUMN IF NOT EXISTS daily_price_subtext TEXT NOT NULL DEFAULT '$5 one-time pass'`);
   await pool.query(`ALTER TABLE site_copy ADD COLUMN IF NOT EXISTS meta_description TEXT NOT NULL DEFAULT 'LOCKIN is a premium AI sports analytics platform delivering nightly NBA moneyline analysis and per-game statistical insights.'`);
+  await pool.query(`ALTER TABLE site_copy ADD COLUMN IF NOT EXISTS track_record_markdown TEXT NOT NULL DEFAULT ''`);
   await pool.query(`
     UPDATE site_copy
     SET daily_cta_text = 'Unlock Tonight''s Edge'
@@ -132,6 +134,25 @@ async function runSchemaSetup(): Promise<void> {
 
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_match_markdowns_game_date ON match_markdowns (game_id, date)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_match_markdowns_date ON match_markdowns (date)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS daily_picks (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      game_id TEXT NOT NULL,
+      picked_side TEXT NOT NULL,
+      analysis_markdown TEXT NOT NULL DEFAULT '',
+      result TEXT NOT NULL DEFAULT 'pending',
+      profit_units NUMERIC(10, 2),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT daily_picks_side_check CHECK (picked_side IN ('away', 'home')),
+      CONSTRAINT daily_picks_result_check CHECK (result IN ('pending', 'win', 'loss'))
+    )
+  `);
+
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_picks_date_game ON daily_picks (date, game_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_daily_picks_date ON daily_picks (date DESC)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS system_prompts (
@@ -200,6 +221,7 @@ async function runSchemaSetup(): Promise<void> {
   `);
 
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_sessions_game_id ON chat_sessions (game_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_sessions_email_game_created ON chat_sessions (LOWER(email), game_id, created_at DESC)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS chat_messages (
@@ -280,6 +302,7 @@ async function runSchemaSetup(): Promise<void> {
     "system_prompts",
     "games",
     "match_markdowns",
+    "daily_picks",
     "chat_sessions",
     "chat_messages",
     "checkout_sessions",

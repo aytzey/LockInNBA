@@ -53,7 +53,7 @@ export default function GameCard({ game, onOpenChat, promoActive = false }: Game
           </div>
 
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-[color:var(--silver-gray)] md:mt-2 md:gap-3 md:text-[11px]">
-            <span>{formatEstTime(game.gameTimeEST)}</span>
+            <span>{formatEstTime(game.gameTimeEST)} ET</span>
             <span className="text-[color:var(--line-strong)]">•</span>
             <span>via {game.oddsSource}</span>
           </div>
@@ -95,7 +95,7 @@ export default function GameCard({ game, onOpenChat, promoActive = false }: Game
       ) : null}
 
       <div className="mt-3 flex items-center justify-end border-t border-[color:var(--line)] pt-3 md:mt-5 md:pt-4">
-        <span className="game-card__cta">{promoActive ? "Ask AI Free" : "Ask AI"}</span>
+        <span className="game-card__cta">{promoActive ? "Ask AI — Free This Week" : "Ask AI"}</span>
       </div>
     </button>
   );

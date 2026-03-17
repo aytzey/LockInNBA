@@ -5,12 +5,13 @@ import { getEstDateKey } from "@/lib/time";
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const gameId = body?.gameId as string | undefined;
+  const email = (body?.email || "").toString().trim().toLowerCase();
 
   if (!gameId) {
     return NextResponse.json({ message: "gameId is required" }, { status: 400 });
   }
 
-  const session = await createChatSession(gameId);
+  const session = await createChatSession(gameId, email || undefined);
   const hasMatchMarkdown = Boolean(await getMatchMarkdown(session.gameId, getEstDateKey()));
   return NextResponse.json({
     session,

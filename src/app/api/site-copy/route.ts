@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { getSiteCopy } from "@/lib/store";
+import { getResolvedTrackRecordMarkdown, getSiteCopy } from "@/lib/store";
 
 export async function GET() {
-  const siteCopy = await getSiteCopy();
+  const [siteCopy, trackRecordMarkdown] = await Promise.all([
+    getSiteCopy(),
+    getResolvedTrackRecordMarkdown(),
+  ]);
 
   return NextResponse.json({
     dailyCtaText: siteCopy.dailyCtaText,
@@ -11,5 +14,6 @@ export async function GET() {
     headerRightText: siteCopy.headerRightText,
     metaDescription: siteCopy.metaDescription,
     footerDisclaimer: siteCopy.footerDisclaimer,
+    trackRecordMarkdown,
   });
 }

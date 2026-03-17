@@ -474,6 +474,10 @@ textarea:-webkit-autofill {
   gap: 1.35rem;
 }
 
+.hero-preview--minimal {
+  gap: 0;
+}
+
 .hero-preview__headline {
   max-width: 780px;
   font-size: clamp(2rem, 4vw, 3.6rem);
@@ -540,6 +544,75 @@ textarea:-webkit-autofill {
 .hero-preview__blur-stack {
   position: relative;
   z-index: 1;
+}
+
+.hero-preview__pick-stack {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.hero-preview__pick-shell {
+  border-radius: 1.25rem;
+  border: 1px solid rgba(139, 146, 165, 0.12);
+  background: rgba(12, 18, 30, 0.7);
+  padding: 1rem;
+}
+
+.hero-preview__pick-header,
+.hero-preview__pick-identity,
+.hero-preview__pick-market {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.hero-preview__pick-identity,
+.hero-preview__pick-market {
+  margin-top: 0.75rem;
+}
+
+.hero-preview__pick-pill,
+.hero-preview__pick-badge,
+.hero-preview__pick-logo,
+.hero-preview__pick-line {
+  display: inline-flex;
+  border-radius: 999px;
+  background: rgba(245, 245, 243, 0.16);
+}
+
+.hero-preview__pick-pill {
+  width: 5rem;
+  height: 0.65rem;
+}
+
+.hero-preview__pick-badge {
+  width: 3.25rem;
+  height: 1.05rem;
+}
+
+.hero-preview__pick-logo {
+  width: 2rem;
+  height: 2rem;
+}
+
+.hero-preview__pick-line {
+  height: 0.65rem;
+  flex: 1;
+}
+
+.hero-preview__pick-line--short {
+  max-width: 6.2rem;
+}
+
+.hero-preview__pick-line--medium {
+  max-width: 8rem;
+}
+
+.hero-preview__pick-line--shorter {
+  max-width: 4.5rem;
 }
 
 .hero-preview__blur-line {
@@ -928,6 +1001,97 @@ textarea:-webkit-autofill {
   text-transform: uppercase;
 }
 
+.daily-pick-card {
+  display: grid;
+  gap: 0;
+}
+
+.daily-pick-card__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--money-green-line);
+  background: var(--money-green-soft);
+  padding: 0.45rem 0.8rem;
+  color: var(--money-green);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.daily-pick-card__market-row {
+  background:
+    linear-gradient(180deg, rgba(20, 27, 44, 0.92), rgba(11, 17, 28, 0.9)),
+    radial-gradient(circle at top right, rgba(0, 200, 83, 0.08), transparent 32%);
+}
+
+.daily-pick-card__market-entry {
+  position: relative;
+  min-height: 2.75rem;
+}
+
+.daily-pick-card__market-entry--picked {
+  border-radius: 0.85rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--money-green-line);
+  background: rgba(0, 200, 83, 0.08);
+}
+
+.daily-pick-card__pick-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 200, 83, 0.22);
+  background: rgba(0, 200, 83, 0.16);
+  padding: 0.3rem 0.5rem;
+  color: var(--money-green);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.daily-pick-card__analysis {
+  margin-top: 0.9rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.9rem;
+}
+
+.daily-pick-card__result-row {
+  margin-top: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.85rem;
+}
+
+.daily-pick-card__result-pill,
+.daily-pick-card__result-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.4rem 0.7rem;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.daily-pick-card__result-pill {
+  border: 1px solid var(--line);
+  background: rgba(20, 27, 44, 0.88);
+  color: var(--silver-gray);
+}
+
+.daily-pick-card__result-value {
+  border: 1px solid var(--money-green-line);
+  background: var(--money-green-soft);
+  color: var(--money-green);
+}
+
 .chat-context-note,
 .chat-paywall {
   border-radius: 1.25rem;
@@ -1314,6 +1478,11 @@ textarea:-webkit-autofill {
     padding: 1.2rem 1rem;
   }
 
+  .hero-preview__pick-shell {
+    padding: 0.8rem;
+    border-radius: 1rem;
+  }
+
   .hero-preview__brandwash {
     width: 3.8rem;
     height: 3.8rem;
@@ -1381,6 +1550,15 @@ textarea:-webkit-autofill {
   .game-card__cta {
     padding: 0.5rem 0.8rem;
     font-size: 9px;
+  }
+
+  .daily-pick-card__market-entry--picked {
+    padding: 0.45rem 0.55rem;
+  }
+
+  .daily-pick-card__pick-tag {
+    padding: 0.24rem 0.45rem;
+    font-size: 8px;
   }
 
   .primary-button,

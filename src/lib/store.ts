@@ -3,7 +3,11 @@ import { query, withTransaction } from "./db";
 import {
   ChatMessage,
   ChatSession,
+  DailyEdgePreview,
+  DailyPick,
+  DailyPickWithGame,
   DailyPrediction,
+  DailySlateSummary,
   Game,
   MatchMarkdown,
   Payment,
@@ -13,6 +17,7 @@ import {
   SystemPrompt,
 } from "./types";
 import { getEstDateKey } from "./time";
+import { extractTrackRecordSummary } from "./track-record";
 
 interface CheckoutSession {
   id: string;
@@ -46,6 +51,7 @@ export const DEFAULT_SITE_COPY_CONTENT = {
   metaDescription: "LOCKIN is a premium AI sports analytics platform delivering nightly NBA moneyline analysis and per-game statistical insights.",
   footerDisclaimer:
     "For entertainment purposes only. LOCKIN does not accept wagers or guarantee outcomes. If you or someone you know has a gambling problem, call 1-800-GAMBLER.",
+  trackRecordMarkdown: "",
 };
 
 const DEFAULT_PROMO_BANNER: PromoBanner = {
@@ -167,6 +173,7 @@ function mapSiteCopy(row: Record<string, RowValue>): SiteCopy {
     headerRightText: String(row.header_right_text ?? DEFAULT_SITE_COPY_CONTENT.headerRightText),
     metaDescription: String(row.meta_description ?? DEFAULT_SITE_COPY_CONTENT.metaDescription),
     footerDisclaimer: String(row.footer_disclaimer ?? DEFAULT_SITE_COPY_CONTENT.footerDisclaimer),
+    trackRecordMarkdown: String(row.track_record_markdown ?? DEFAULT_SITE_COPY_CONTENT.trackRecordMarkdown),
     updatedAt: toIsoString(row.updated_at),
   };
 }
@@ -221,6 +228,65 @@ function mapGame(row: Record<string, RowValue>): Game {
     venue: String(row.venue ?? ""),
     gameUrl: String(row.game_url ?? ""),
     apiGameId: String(row.api_game_id ?? ""),
+  };
+}
+
+function mapDailyPick(row: Record<string, RowValue>): DailyPick {
+  return {
+    id: String(row.id),
+    date: String(row.date),
+    gameId: String(row.game_id),
+    pickedSide: row.picked_side === "home" ? "home" : "away",
+    analysisMarkdown: String(row.analysis_markdown ?? ""),
+    result:
+      row.result === "win" || row.result === "loss"
+        ? row.result
+        : "pending",
+    profitUnits: toNullableNumber(row.profit_units),
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapDailyPickWithGame(row: Record<string, RowValue>): DailyPickWithGame {
+  const pick = mapDailyPick(row);
+  const hasGame = Boolean(row.g_id);
+
+  return {
+    ...pick,
+    game: hasGame
+      ? {
+          id: String(row.g_id),
+          date: String(row.g_date ?? pick.date),
+          awayTeam: String(row.g_away_team ?? ""),
+          awayDisplayName: String(row.g_away_display_name ?? ""),
+          awayRecord: String(row.g_away_record ?? ""),
+          awayLeader: String(row.g_away_leader ?? ""),
+          awayLogo: String(row.g_away_logo ?? ""),
+          homeTeam: String(row.g_home_team ?? ""),
+          homeDisplayName: String(row.g_home_display_name ?? ""),
+          homeRecord: String(row.g_home_record ?? ""),
+          homeLeader: String(row.g_home_leader ?? ""),
+          homeLogo: String(row.g_home_logo ?? ""),
+          gameTimeEST: String(row.g_game_time_est ?? ""),
+          status: row.g_status === "live" || row.g_status === "final" ? row.g_status : "upcoming",
+          statusDetail: String(row.g_status_detail ?? ""),
+          awayScore: toNullableNumber(row.g_away_score),
+          homeScore: toNullableNumber(row.g_home_score),
+          awayMoneyline: toNumber(row.g_away_moneyline),
+          homeMoneyline: toNumber(row.g_home_moneyline),
+          oddsSource:
+            row.g_odds_source === "FanDuel" || row.g_odds_source === "BetMGM"
+              ? row.g_odds_source
+              : "DraftKings",
+          spread: String(row.g_spread ?? ""),
+          total: String(row.g_total ?? ""),
+          broadcast: String(row.g_broadcast ?? ""),
+          venue: String(row.g_venue ?? ""),
+          gameUrl: String(row.g_game_url ?? ""),
+          apiGameId: String(row.g_api_game_id ?? ""),
+        }
+      : null,
   };
 }
 
@@ -302,6 +368,51 @@ function emptyPrediction(date: string): DailyPrediction {
     createdAt: now,
     updatedAt: now,
   };
+}
+
+function formatMoneyline(value: number): string {
+  return value > 0 ? `+${value}` : `${value}`;
+}
+
+function formatTrackRecordDate(date: string): string {
+  const parsed = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    return date;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "America/New_York",
+  }).format(parsed);
+}
+
+function formatProfitUnits(value: number | null): string | null {
+  if (value === null || Number.isNaN(value)) {
+    return null;
+  }
+
+  const normalized = Number(value);
+  const sign = normalized > 0 ? "+" : normalized < 0 ? "-" : "";
+  const absolute = Math.abs(normalized);
+  const formatted = Number.isInteger(absolute) ? absolute.toFixed(1) : absolute.toString();
+  return `${sign}${formatted}u`;
+}
+
+function groupByDate<T extends { date: string }>(items: T[]): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+
+  for (const item of items) {
+    const bucket = groups.get(item.date);
+    if (bucket) {
+      bucket.push(item);
+      continue;
+    }
+
+    groups.set(item.date, [item]);
+  }
+
+  return groups;
 }
 
 function amountForPayment(type: "daily_pick" | "match_chat" | "extra_questions"): number {
@@ -432,6 +543,373 @@ export async function deletePrediction(id: string): Promise<void> {
   await query(`DELETE FROM predictions WHERE id = $1`, [id]);
 }
 
+const DAILY_PICK_WITH_GAME_SELECT = `
+  SELECT
+    dp.*,
+    g.id AS g_id,
+    g.date AS g_date,
+    g.away_team AS g_away_team,
+    g.away_display_name AS g_away_display_name,
+    g.away_record AS g_away_record,
+    g.away_leader AS g_away_leader,
+    g.away_logo AS g_away_logo,
+    g.home_team AS g_home_team,
+    g.home_display_name AS g_home_display_name,
+    g.home_record AS g_home_record,
+    g.home_leader AS g_home_leader,
+    g.home_logo AS g_home_logo,
+    g.game_time_est AS g_game_time_est,
+    g.status AS g_status,
+    g.status_detail AS g_status_detail,
+    g.away_score AS g_away_score,
+    g.home_score AS g_home_score,
+    g.away_moneyline AS g_away_moneyline,
+    g.home_moneyline AS g_home_moneyline,
+    g.odds_source AS g_odds_source,
+    g.spread AS g_spread,
+    g.total AS g_total,
+    g.broadcast AS g_broadcast,
+    g.venue AS g_venue,
+    g.game_url AS g_game_url,
+    g.api_game_id AS g_api_game_id
+  FROM daily_picks dp
+  LEFT JOIN games g ON g.id = dp.game_id
+`;
+
+function buildDailyEdgePreview(date: string, prediction: DailyPrediction | null, picks: DailyPick[]): DailyEdgePreview {
+  const isNoEdgeDay = Boolean(prediction?.source === "admin" && prediction.isNoEdgeDay);
+  const pickCount = picks.length;
+  const status = isNoEdgeDay
+    ? "no_edge"
+    : pickCount > 0
+      ? "ready"
+      : "pending";
+
+  return {
+    date,
+    status,
+    hasPrediction: status === "ready",
+    isNoEdgeDay,
+    pickCount,
+  };
+}
+
+function mapSlateSummary(row: Record<string, RowValue>): DailySlateSummary {
+  const pickCount = toNumber(row.pick_count);
+  const isNoEdgeDay = Boolean(row.is_no_edge_day);
+  const status = isNoEdgeDay
+    ? "no_edge"
+    : pickCount > 0
+      ? "ready"
+      : "pending";
+
+  return {
+    date: String(row.date),
+    status,
+    isNoEdgeDay,
+    pickCount,
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function buildDailyPickShareMarkdown(picks: DailyPickWithGame[]): string {
+  return picks
+    .filter((pick) => pick.game)
+    .map((pick) => {
+      const game = pick.game as Game;
+      const pickedTeam = pick.pickedSide === "away" ? game.awayTeam : game.homeTeam;
+      const pickedMoneyline = pick.pickedSide === "away" ? game.awayMoneyline : game.homeMoneyline;
+      const analysis = pick.analysisMarkdown.trim();
+
+      return [
+        `### ${pickedTeam} ML ${formatMoneyline(pickedMoneyline)}`,
+        `${game.awayTeam} @ ${game.homeTeam} • ${game.status === "upcoming" ? "Tonight" : game.statusDetail || "Live board"}`,
+        analysis || "The edge is live inside LOCKIN.",
+      ].join("\n\n");
+    })
+    .join("\n\n");
+}
+
+function buildTrackRecordLine(pick: DailyPickWithGame): string | null {
+  if (!pick.game || pick.result === "pending") {
+    return null;
+  }
+
+  const game = pick.game;
+  const pickedTeam = pick.pickedSide === "away" ? game.awayTeam : game.homeTeam;
+  const matchup = pick.pickedSide === "away"
+    ? `**${game.awayTeam}** @ ${game.homeTeam}`
+    : `${game.awayTeam} @ **${game.homeTeam}**`;
+  const pickedMoneyline = pick.pickedSide === "away" ? game.awayMoneyline : game.homeMoneyline;
+  const score =
+    game.awayScore !== null && game.homeScore !== null
+      ? ` (${game.awayScore}-${game.homeScore})`
+      : "";
+  const profit = formatProfitUnits(pick.profitUnits);
+
+  return [
+    formatTrackRecordDate(pick.date),
+    matchup,
+    `${pickedTeam} ${formatMoneyline(pickedMoneyline)}`,
+    pick.result === "win" ? `W${score}` : `L${score}`,
+    profit,
+  ].filter(Boolean).join(" · ");
+}
+
+export async function listDailyPicksForDate(date = getEstDateKey()): Promise<DailyPick[]> {
+  const result = await query(
+    `SELECT * FROM daily_picks WHERE date = $1 ORDER BY created_at ASC, id ASC`,
+    [date],
+  );
+
+  return result.rows.map((row) => mapDailyPick(row as Record<string, RowValue>));
+}
+
+export async function listDailyPicksWithGamesForDate(date = getEstDateKey()): Promise<DailyPickWithGame[]> {
+  const result = await query(
+    `${DAILY_PICK_WITH_GAME_SELECT}
+     WHERE dp.date = $1
+     ORDER BY COALESCE(g.game_time_est, dp.created_at::text) ASC, dp.created_at ASC, dp.id ASC`,
+    [date],
+  );
+
+  return result.rows.map((row) => mapDailyPickWithGame(row as Record<string, RowValue>));
+}
+
+export async function listDailyPicksWithGamesForDates(dates: string[]): Promise<DailyPickWithGame[]> {
+  if (dates.length === 0) {
+    return [];
+  }
+
+  const result = await query(
+    `${DAILY_PICK_WITH_GAME_SELECT}
+     WHERE dp.date = ANY($1::text[])
+     ORDER BY dp.date DESC, COALESCE(g.game_time_est, dp.created_at::text) ASC, dp.created_at ASC, dp.id ASC`,
+    [dates],
+  );
+
+  return result.rows.map((row) => mapDailyPickWithGame(row as Record<string, RowValue>));
+}
+
+export async function getPublicDailyEdgePreview(date = getEstDateKey()): Promise<DailyEdgePreview> {
+  const [prediction, picks] = await Promise.all([
+    getTodayPrediction(date).catch(() => null),
+    listDailyPicksForDate(date),
+  ]);
+
+  return buildDailyEdgePreview(date, prediction, picks);
+}
+
+export async function listDailySlateSummaries(limit = 21): Promise<DailySlateSummary[]> {
+  const result = await query(
+    `SELECT
+       p.date,
+       p.is_no_edge_day,
+       p.updated_at,
+       COUNT(dp.id) AS pick_count
+     FROM predictions p
+     LEFT JOIN daily_picks dp ON dp.date = p.date
+     WHERE p.source = 'admin'
+     GROUP BY p.date, p.is_no_edge_day, p.updated_at
+     ORDER BY p.date DESC
+     LIMIT $1`,
+    [limit],
+  );
+
+  return result.rows.map((row) => mapSlateSummary(row as Record<string, RowValue>));
+}
+
+export async function saveDailyPickSlate(
+  date: string,
+  input: {
+    isNoEdgeDay: boolean;
+    picks: Array<{
+      gameId: string;
+      pickedSide: "away" | "home";
+      analysisMarkdown?: string;
+      result?: "pending" | "win" | "loss";
+      profitUnits?: number | null;
+    }>;
+  },
+): Promise<{
+  preview: DailyEdgePreview;
+  picks: DailyPickWithGame[];
+}> {
+  const normalizedPicks = Array.from(
+    input.picks.reduce<Map<string, {
+      gameId: string;
+      pickedSide: "away" | "home";
+      analysisMarkdown: string;
+      result: "pending" | "win" | "loss";
+      profitUnits: number | null;
+    }>>((acc, pick) => {
+      const gameId = pick.gameId.trim();
+      if (!gameId) {
+        return acc;
+      }
+
+      acc.set(gameId, {
+        gameId,
+        pickedSide: pick.pickedSide === "home" ? "home" : "away",
+        analysisMarkdown: pick.analysisMarkdown?.trim() || "",
+        result:
+          pick.result === "win" || pick.result === "loss"
+            ? pick.result
+            : "pending",
+        profitUnits:
+          typeof pick.profitUnits === "number" && Number.isFinite(pick.profitUnits)
+            ? Number(pick.profitUnits)
+            : null,
+      });
+      return acc;
+    }, new Map()).values(),
+  );
+  const isNoEdgeDay = input.isNoEdgeDay && normalizedPicks.length === 0;
+
+  await withTransaction(async (client) => {
+    await client.query(`DELETE FROM daily_picks WHERE date = $1`, [date]);
+
+    for (const pick of normalizedPicks) {
+      await client.query(
+        `INSERT INTO daily_picks (
+           id,
+           date,
+           game_id,
+           picked_side,
+           analysis_markdown,
+           result,
+           profit_units,
+           created_at,
+           updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())`,
+        [
+          crypto.randomUUID(),
+          date,
+          pick.gameId,
+          pick.pickedSide,
+          pick.analysisMarkdown,
+          pick.result,
+          pick.profitUnits,
+        ],
+      );
+    }
+
+    if (normalizedPicks.length === 0 && !isNoEdgeDay) {
+      await client.query(`DELETE FROM predictions WHERE date = $1`, [date]);
+      return;
+    }
+
+    await client.query(
+      `INSERT INTO predictions (
+         id,
+         date,
+         teaser_text,
+         markdown_content,
+         is_no_edge_day,
+         source,
+         created_at,
+         updated_at
+       ) VALUES ($1, $2, '', '', $3, 'admin', NOW(), NOW())
+       ON CONFLICT (date) DO UPDATE
+         SET teaser_text = EXCLUDED.teaser_text,
+             markdown_content = EXCLUDED.markdown_content,
+             is_no_edge_day = EXCLUDED.is_no_edge_day,
+             source = 'admin',
+             updated_at = NOW()`,
+      [crypto.randomUUID(), date, isNoEdgeDay],
+    );
+  });
+
+  const picks = await listDailyPicksWithGamesForDate(date);
+  return {
+    preview: buildDailyEdgePreview(date, await getTodayPrediction(date).catch(() => null), picks),
+    picks,
+  };
+}
+
+export async function buildAutomaticTrackRecordMarkdown(limit = 21): Promise<string> {
+  const slates = await listDailySlateSummaries(limit);
+  if (slates.length === 0) {
+    return "";
+  }
+
+  const picks = await listDailyPicksWithGamesForDates(slates.map((slate) => slate.date));
+  const picksByDate = groupByDate(picks);
+  const weeklyCutoff = getEstDateKey(new Date(Date.now() - (6 * 24 * 60 * 60 * 1000)));
+
+  let wins = 0;
+  let losses = 0;
+  let totalUnits = 0;
+  const lines: string[] = [];
+
+  for (const slate of slates) {
+    const datePicks = picksByDate.get(slate.date) || [];
+    const completedLines = datePicks
+      .map((pick) => {
+        if (slate.date >= weeklyCutoff && pick.result !== "pending") {
+          if (pick.result === "win") {
+            wins += 1;
+          } else if (pick.result === "loss") {
+            losses += 1;
+          }
+
+          totalUnits += pick.profitUnits ?? 0;
+        }
+
+        return buildTrackRecordLine(pick);
+      })
+      .filter((line): line is string => Boolean(line));
+
+    if (completedLines.length > 0) {
+      lines.push(...completedLines);
+      continue;
+    }
+
+    if (slate.isNoEdgeDay) {
+      lines.push(`${formatTrackRecordDate(slate.date)} · PASS — No edge detected`);
+    }
+  }
+
+  if (lines.length === 0) {
+    return "";
+  }
+
+  const decidedCount = wins + losses;
+  const winRate = decidedCount > 0 ? Math.round((wins / decidedCount) * 100) : 0;
+  const summary = decidedCount > 0
+    ? `### This Week: ${wins}-${losses} | ${formatProfitUnits(totalUnits) || "+0.0u"} | ${winRate}% Win Rate`
+    : "";
+
+  return [summary, ...lines].filter(Boolean).join("\n");
+}
+
+export async function getResolvedTrackRecordMarkdown(): Promise<string> {
+  const [automaticMarkdown, siteCopy] = await Promise.all([
+    buildAutomaticTrackRecordMarkdown(),
+    getSiteCopy(),
+  ]);
+
+  return automaticMarkdown || siteCopy.trackRecordMarkdown;
+}
+
+export async function getUnlockedDailyEdge(date = getEstDateKey()): Promise<{
+  preview: DailyEdgePreview;
+  picks: DailyPickWithGame[];
+  markdown: string;
+}> {
+  const [prediction, picks] = await Promise.all([
+    getTodayPrediction(date).catch(() => null),
+    listDailyPicksWithGamesForDate(date),
+  ]);
+  const preview = buildDailyEdgePreview(date, prediction, picks);
+
+  return {
+    preview,
+    picks,
+    markdown: buildDailyPickShareMarkdown(picks),
+  };
+}
+
 export async function getSocialProofBanner(): Promise<SocialProofBanner | null> {
   const result = await query(`SELECT * FROM social_proof_banner WHERE id = 'default' LIMIT 1`);
   if (!result.rows[0]) {
@@ -444,6 +922,18 @@ export async function getSocialProofBanner(): Promise<SocialProofBanner | null> 
   }
 
   return banner;
+}
+
+export async function getPublicSocialProofMessages(): Promise<string[]> {
+  const [trackRecordMarkdown, banner] = await Promise.all([getResolvedTrackRecordMarkdown(), getSocialProofBanner()]);
+  const summary = extractTrackRecordSummary(trackRecordMarkdown);
+  const baseMessages = banner?.messages?.length ? banner.messages : [...DEFAULT_SOCIAL_PROOF_MESSAGES];
+
+  if (!summary) {
+    return baseMessages;
+  }
+
+  return [summary, ...baseMessages.filter((message) => message.trim() && message.trim() !== summary)];
 }
 
 export async function setSocialProofBanner(input: string[] | string): Promise<SocialProofBanner> {
@@ -485,6 +975,7 @@ export async function setSiteCopy(input: {
   headerRightText?: string;
   metaDescription?: string;
   footerDisclaimer?: string;
+  trackRecordMarkdown?: string;
 }): Promise<SiteCopy> {
   const current = await getSiteCopy();
   const next = {
@@ -494,6 +985,10 @@ export async function setSiteCopy(input: {
     headerRightText: input.headerRightText?.trim() || "",
     metaDescription: input.metaDescription?.trim() || DEFAULT_SITE_COPY_CONTENT.metaDescription,
     footerDisclaimer: input.footerDisclaimer?.trim() || DEFAULT_SITE_COPY_CONTENT.footerDisclaimer,
+    trackRecordMarkdown:
+      input.trackRecordMarkdown?.trim() ??
+      current.trackRecordMarkdown ??
+      DEFAULT_SITE_COPY_CONTENT.trackRecordMarkdown,
   };
 
   const result = await query(
@@ -505,8 +1000,9 @@ export async function setSiteCopy(input: {
        header_right_text,
        meta_description,
        footer_disclaimer,
+       track_record_markdown,
        updated_at
-     ) VALUES ('default', $1, $2, $3, $4, $5, $6, NOW())
+     ) VALUES ('default', $1, $2, $3, $4, $5, $6, $7, NOW())
      ON CONFLICT (id) DO UPDATE
        SET daily_cta_text = EXCLUDED.daily_cta_text,
            daily_price_subtext = EXCLUDED.daily_price_subtext,
@@ -514,6 +1010,7 @@ export async function setSiteCopy(input: {
            header_right_text = EXCLUDED.header_right_text,
            meta_description = EXCLUDED.meta_description,
            footer_disclaimer = EXCLUDED.footer_disclaimer,
+           track_record_markdown = EXCLUDED.track_record_markdown,
            updated_at = NOW()
      RETURNING *`,
     [
@@ -523,6 +1020,7 @@ export async function setSiteCopy(input: {
       next.headerRightText,
       next.metaDescription || current.metaDescription,
       next.footerDisclaimer || current.footerDisclaimer,
+      next.trackRecordMarkdown,
     ],
   );
 
@@ -823,7 +1321,39 @@ export async function touchGamesRefreshState(date: string): Promise<DataRefreshS
   return mapDataRefreshState(result.rows[0] as Record<string, RowValue>);
 }
 
-export async function createChatSession(gameId: string): Promise<ChatSession> {
+export async function findChatSessionForEmailGame(
+  gameId: string,
+  email: string,
+  date = getEstDateKey(),
+): Promise<ChatSession | null> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  const result = await query(
+    `SELECT *
+     FROM chat_sessions
+     WHERE game_id = $1
+       AND LOWER(email) = LOWER($2)
+       AND (created_at AT TIME ZONE 'America/New_York')::date = $3::date
+     ORDER BY updated_at DESC, created_at DESC
+     LIMIT 1`,
+    [gameId, normalizedEmail, date],
+  );
+
+  return result.rows[0] ? mapChatSession(result.rows[0] as Record<string, RowValue>) : null;
+}
+
+export async function createChatSession(gameId: string, email?: string | null): Promise<ChatSession> {
+  const normalizedEmail = email?.trim().toLowerCase() || "";
+  if (normalizedEmail) {
+    const existing = await findChatSessionForEmailGame(gameId, normalizedEmail);
+    if (existing) {
+      return existing;
+    }
+  }
+
   const created = await query(
     `INSERT INTO chat_sessions (
        id,
@@ -835,9 +1365,9 @@ export async function createChatSession(gameId: string): Promise<ChatSession> {
        is_paid,
        created_at,
        updated_at
-     ) VALUES ($1, $2, $3, NULL, 0, 0, FALSE, NOW(), NOW())
+     ) VALUES ($1, $2, $3, $4, 0, 0, FALSE, NOW(), NOW())
      RETURNING *`,
-    [crypto.randomUUID(), gameId, crypto.randomUUID()],
+    [crypto.randomUUID(), gameId, crypto.randomUUID(), normalizedEmail || null],
   );
 
   return mapChatSession(created.rows[0] as Record<string, RowValue>);
@@ -903,6 +1433,22 @@ export async function touchSession(
     `UPDATE chat_sessions SET ${updates.join(", ")} WHERE id = $${values.length}`,
     values,
   );
+}
+
+export async function consumeChatQuestion(sessionId: string, email?: string | null): Promise<ChatSession | null> {
+  const result = await query(
+    `UPDATE chat_sessions
+     SET questions_used = questions_used + 1,
+         email = COALESCE($2, email),
+         updated_at = NOW()
+     WHERE id = $1
+       AND is_paid = TRUE
+       AND questions_used < question_limit
+     RETURNING *`,
+    [sessionId, email?.trim().toLowerCase() || null],
+  );
+
+  return result.rows[0] ? mapChatSession(result.rows[0] as Record<string, RowValue>) : null;
 }
 
 export async function hasChatCapacity(sessionId: string): Promise<boolean> {
@@ -1019,7 +1565,6 @@ export async function completeCheckout(
         `UPDATE chat_sessions
          SET is_paid = TRUE,
              question_limit = GREATEST(3, question_limit),
-             questions_used = 0,
              email = $2,
              updated_at = NOW()
          WHERE id = $1`,

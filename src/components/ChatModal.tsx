@@ -34,7 +34,7 @@ export default function ChatModal({
 }: ChatModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const [chatSession, setChatSession] = useState<ChatSessionState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -46,6 +46,9 @@ export default function ChatModal({
   const [isInitializing, setIsInitializing] = useState(true);
   const [leadEmail, setLeadEmail] = useState("");
   const [hasMatchMarkdown, setHasMatchMarkdown] = useState(true);
+  const [pendingQuestion, setPendingQuestion] = useState("");
+  const [showEmailCapture, setShowEmailCapture] = useState(false);
+  const [isUnlockingQuestion, setIsUnlockingQuestion] = useState(false);
 
   useEffect(() => {
     try {
@@ -75,6 +78,12 @@ export default function ChatModal({
     scrollToBottom();
   }, [chatMessages, scrollToBottom]);
 
+  useEffect(() => {
+    if (!isInitializing && !showEmailCapture) {
+      inputRef.current?.focus();
+    }
+  }, [isInitializing, showEmailCapture]);
+
   // Lock body scroll when modal is open
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -84,6 +93,13 @@ export default function ChatModal({
   useEffect(() => {
     async function initSession() {
       try {
+        const cachedLeadEmail = (() => {
+          try {
+            return window.localStorage.getItem(LEAD_EMAIL_KEY) || "";
+          } catch {
+            return "";
+          }
+        })();
         const restoredSessionId = window.localStorage.getItem(`${CHAT_SESSION_RESTORE_PREFIX}${game.id}`);
         if (restoredSessionId) {
           const restoredResponse = await fetch(`/api/chat/session/${restoredSessionId}`);
@@ -91,6 +107,9 @@ export default function ChatModal({
           if (restoredResponse.ok && restoredData?.session?.gameId === game.id) {
             const session = restoredData.session as ChatSessionState;
             setChatSession(session);
+            if (session.email) {
+              setLeadEmail(session.email);
+            }
             setChatQuestionsRemaining(restoredData.questionsRemaining ?? 0);
             setChatMessages(restoredData.messages ?? []);
             setHasMatchMarkdown(restoredData.hasMatchMarkdown ?? true);
@@ -106,7 +125,7 @@ export default function ChatModal({
         const res = await fetch("/api/chat/session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ gameId: game.id }),
+          body: JSON.stringify({ gameId: game.id, email: cachedLeadEmail }),
         });
         const data = await res.json();
         if (!res.ok || !data.session) {
@@ -114,6 +133,9 @@ export default function ChatModal({
         }
         const session = data.session as ChatSessionState;
         setChatSession(session);
+        if (session.email) {
+          setLeadEmail(session.email);
+        }
         setChatQuestionsRemaining(data.questionsRemaining ?? 0);
         setChatMessages(data.messages ?? []);
         setHasMatchMarkdown(data.hasMatchMarkdown ?? true);
@@ -157,13 +179,57 @@ export default function ChatModal({
     }
   }
 
-  async function openCheckoutAndWait(type: "match_chat" | "extra_questions", email?: string) {
-    if (!chatSession) return null;
+  async function resolveSessionByEmail(email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!validateEmail(normalizedEmail)) {
+      return null;
+    }
+
+    const response = await fetch("/api/chat/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ gameId: game.id, email: normalizedEmail }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok || !body?.session) {
+      throw new Error(body?.message || "Could not sync this matchup session.");
+    }
+
+    const session = body.session as ChatSessionState;
+    setChatSession(session);
+    if (session.email) {
+      setLeadEmail(session.email);
+    }
+    setChatQuestionsRemaining(body.questionsRemaining ?? 0);
+    setHasMatchMarkdown(body.hasMatchMarkdown ?? true);
+    setChatMessages(Array.isArray(body.messages) ? (body.messages as ChatMessage[]) : []);
+    onMessagesChange(Array.isArray(body.messages) ? (body.messages as ChatMessage[]) : []);
+
+    try {
+      window.localStorage.setItem(`${CHAT_SESSION_RESTORE_PREFIX}${game.id}`, session.id);
+      setChatToken(window.localStorage.getItem(`${CHAT_TOKEN_PREFIX}${session.id}`) || null);
+    } catch {
+      setChatToken(null);
+    }
+
+    return {
+      session,
+      questionsRemaining: body.questionsRemaining ?? 0,
+    };
+  }
+
+  async function openCheckoutAndWait(
+    type: "match_chat" | "extra_questions",
+    email?: string,
+    sessionOverride?: ChatSessionState | null,
+  ) {
+    const activeSession = sessionOverride ?? chatSession;
+    if (!activeSession) return null;
     const checkout = await createCheckout({
       type,
       email,
-      gameId: chatSession.gameId,
-      chatSessionId: chatSession.id,
+      gameId: activeSession.gameId,
+      chatSessionId: activeSession.id,
     });
 
     let token: string;
@@ -174,7 +240,7 @@ export default function ChatModal({
     } else {
       const popup = window.open(checkout.checkoutUrl, "lemonsqueezy", "width=460,height=720,left=200,top=100");
       if (!popup) {
-        window.localStorage.setItem(`${CHAT_SESSION_RESTORE_PREFIX}${chatSession.gameId}`, chatSession.id);
+        window.localStorage.setItem(`${CHAT_SESSION_RESTORE_PREFIX}${activeSession.gameId}`, activeSession.id);
         window.location.href = checkout.checkoutUrl;
         return null;
       }
@@ -186,30 +252,84 @@ export default function ChatModal({
       throw new Error("Checkout could not be completed.");
     }
 
-    window.localStorage.setItem(`${CHAT_SESSION_RESTORE_PREFIX}${chatSession.gameId}`, chatSession.id);
-    window.localStorage.setItem(`${CHAT_TOKEN_PREFIX}${chatSession.id}`, token);
+    window.localStorage.setItem(`${CHAT_SESSION_RESTORE_PREFIX}${activeSession.gameId}`, activeSession.id);
+    window.localStorage.setItem(`${CHAT_TOKEN_PREFIX}${activeSession.id}`, token);
     setChatToken(token);
-    await refreshChatSession(chatSession.id);
+    await refreshChatSession(activeSession.id);
     return token;
   }
 
-  async function ensureChatPaid() {
-    if (!chatSession) return;
-    if (chatSession.isPaid && chatQuestionsRemaining > 0) return;
-    setChatError("");
+  function getStoredChatToken(sessionId: string): string | null {
     try {
-      const email = leadEmail.trim().toLowerCase();
-      if (promoActive && !validateEmail(email)) {
-        throw new Error("Enter a valid email to unlock free launch access.");
-      }
+      return window.localStorage.getItem(`${CHAT_TOKEN_PREFIX}${sessionId}`) || null;
+    } catch {
+      return null;
+    }
+  }
 
-      const token = await openCheckoutAndWait("match_chat", promoActive ? email : undefined);
-      if (!token) {
-        return;
+  async function unlockChatRoom(emailOverride?: string) {
+    if (!chatSession) {
+      throw new Error("Chat session unavailable.");
+    }
+
+    setChatError("");
+
+    const normalizedEmail = (emailOverride ?? leadEmail).trim().toLowerCase();
+    if (!validateEmail(normalizedEmail)) {
+      throw new Error(
+        promoActive
+          ? "Enter a valid email to unlock free launch access."
+          : "Drop a valid email to unlock this matchup room.",
+      );
+    }
+
+    let activeSession = chatSession;
+    let questionsRemaining = chatQuestionsRemaining;
+    const resolved = await resolveSessionByEmail(normalizedEmail);
+    if (resolved) {
+      activeSession = resolved.session;
+      questionsRemaining = resolved.questionsRemaining;
+    }
+
+    const existingToken = getStoredChatToken(activeSession.id) || chatToken;
+
+    if (activeSession.isPaid && questionsRemaining <= 0) {
+      return {
+        session: activeSession,
+        token: existingToken,
+      };
+    }
+
+    if (activeSession.isPaid && questionsRemaining > 0 && existingToken) {
+      setChatToken(existingToken);
+      return {
+        session: activeSession,
+        token: existingToken,
+      };
+    }
+
+    const token = await openCheckoutAndWait("match_chat", normalizedEmail, activeSession);
+    if (!token) {
+      return null;
+    }
+
+    toast.success(promoActive ? "AI room opened for free." : "Chat unlocked! Ask your questions.");
+    return {
+      session: activeSession,
+      token,
+    };
+  }
+
+  async function ensureChatPaid() {
+    try {
+      const unlocked = await unlockChatRoom();
+      if (unlocked?.session?.isPaid) {
+        inputRef.current?.focus();
       }
-      toast.success(promoActive ? "AI room opened for free." : "Chat unlocked! Ask your questions.");
-      inputRef.current?.focus();
     } catch (error) {
+      if (!validateEmail(leadEmail.trim().toLowerCase())) {
+        setShowEmailCapture(true);
+      }
       setChatError(error instanceof Error ? error.message : "Payment failed");
     }
   }
@@ -221,7 +341,7 @@ export default function ChatModal({
     }
     setChatError("");
     try {
-      const token = await openCheckoutAndWait("extra_questions");
+      const token = await openCheckoutAndWait("extra_questions", undefined, chatSession);
       if (!token) {
         return;
       }
@@ -233,9 +353,32 @@ export default function ChatModal({
   }
 
   async function sendChatMessage() {
-    if (!chatSession || !chatInput.trim()) return;
-    if (chatQuestionsRemaining <= 0) { setChatError("Question limit reached."); return; }
+    const messageToSend = chatInput.trim();
+    if (!chatSession || !messageToSend) return;
+    if (chatQuestionsRemaining <= 0 && chatSession.isPaid) { setChatError("Question limit reached."); return; }
+    if (!chatSession.isPaid) {
+      setPendingQuestion(messageToSend);
+      if (!validateEmail(leadEmail.trim().toLowerCase())) {
+        setShowEmailCapture(true);
+        setChatError("");
+        return;
+      }
+
+      await continuePendingQuestion(messageToSend);
+      return;
+    }
     if (!chatToken) { setChatError("Payment required."); return; }
+
+    await postChatMessage(messageToSend, chatSession, chatToken);
+  }
+
+  async function postChatMessage(message: string, sessionOverride?: ChatSessionState | null, tokenOverride?: string | null) {
+    const activeSession = sessionOverride ?? chatSession;
+    const activeToken = tokenOverride ?? chatToken;
+    if (!activeSession || !activeToken) {
+      setChatError("Payment required.");
+      return;
+    }
 
     setIsChatBusy(true);
     setChatError("");
@@ -244,14 +387,18 @@ export default function ChatModal({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${chatToken}`,
+          Authorization: `Bearer ${activeToken}`,
         },
-        body: JSON.stringify({ sessionId: chatSession.id, message: chatInput.trim() }),
+        body: JSON.stringify({
+          sessionId: activeSession.id,
+          message,
+          email: leadEmail.trim().toLowerCase() || undefined,
+        }),
       });
       const data = await res.json();
       if (res.status === 402) {
         setChatError(data.message || "Payment required.");
-        await refreshChatSession(chatSession.id);
+        await refreshChatSession(activeSession.id);
         return;
       }
       if (!res.ok) throw new Error(data.message || "Chat request failed.");
@@ -259,6 +406,7 @@ export default function ChatModal({
       onMessagesChange(data.messages as ChatMessage[]);
       setChatQuestionsRemaining(data.questionsRemaining ?? 0);
       setChatInput("");
+      setPendingQuestion("");
     } catch (error) {
       setChatError(error instanceof Error ? error.message : "Network error.");
     } finally {
@@ -266,9 +414,33 @@ export default function ChatModal({
     }
   }
 
+  async function continuePendingQuestion(questionOverride?: string) {
+    const messageToSend = (questionOverride || pendingQuestion || chatInput).trim();
+    if (!messageToSend) {
+      setChatError("Ask a question first.");
+      return;
+    }
+
+    setIsUnlockingQuestion(true);
+    try {
+      const normalizedEmail = leadEmail.trim().toLowerCase();
+      const unlocked = await unlockChatRoom(normalizedEmail);
+      if (!unlocked?.token) {
+        return;
+      }
+
+      setShowEmailCapture(false);
+      await postChatMessage(messageToSend, unlocked.session, unlocked.token);
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "Could not continue with this email.");
+    } finally {
+      setIsUnlockingQuestion(false);
+    }
+  }
+
   const isPaid = chatSession?.isPaid ?? false;
   const questionLimit = chatSession?.questionLimit ?? 0;
-  const canSend = isPaid && chatQuestionsRemaining > 0 && !isChatBusy;
+  const canSend = !isInitializing && !isChatBusy && (!isPaid || chatQuestionsRemaining > 0);
   const showPaywall = !isPaid || chatQuestionsRemaining <= 0;
 
   return (
@@ -309,7 +481,7 @@ export default function ChatModal({
               <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[color:var(--silver-gray)] md:mt-2 md:text-[11px]">
                 <span>{game.statusDetail}</span>
                 <span className="text-[color:var(--line-strong)]">•</span>
-                <span>{formatEstTime(game.gameTimeEST)} EST</span>
+                <span>{formatEstTime(game.gameTimeEST)} ET</span>
                 <span className="hidden text-[color:var(--line-strong)] md:inline">•</span>
                 <span className="hidden md:inline">{game.awayTeam} {moneyline(game.awayMoneyline)}</span>
                 <span className="hidden md:inline">{game.homeTeam} {moneyline(game.homeMoneyline)}</span>
@@ -358,10 +530,10 @@ export default function ChatModal({
               <p className="mb-1 text-sm font-medium text-white">Ready to analyze this matchup</p>
               <p className="max-w-sm text-[11px] leading-5 text-[color:var(--silver-gray)]">
                 {isPaid
-                  ? "Ask for market read, team shape, risk framing or game-script pressure."
+                  ? "Ask about this specific matchup. Each game keeps its own running question count."
                   : promoActive
-                    ? "Launch week is live. Unlock this room free with your email and get three focused questions."
-                    : "Start a deep analysis for this game. Three questions unlock for $2."}
+                    ? "Launch week is live. Ask 3 questions about this specific matchup free with your email."
+                    : "Ask 3 questions about this specific matchup. Each game is a separate $2 session."}
               </p>
             </motion.div>
           ) : null}
@@ -444,12 +616,12 @@ export default function ChatModal({
                   ? "border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)] text-[color:var(--money-green)]"
                   : "border border-[color:var(--gold-line)] bg-[color:var(--gold-soft)] text-[color:var(--gold)]"
             }`}>
-              {isPaid ? "Active" : promoActive ? "Free" : "Locked"}
+              {isPaid ? "Active Room" : promoActive ? "Free This Week" : "Locked Room"}
             </span>
-            <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-[color:var(--silver-gray)]">
+            <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-3 py-1 text-right text-[10px] uppercase tracking-[0.16em] text-[color:var(--silver-gray)]">
               {questionLimit > 0
-                ? `${chatQuestionsRemaining}/${questionLimit} questions remaining`
-                : "3 questions included"}
+                ? `${game.awayTeam} @ ${game.homeTeam} • ${chatQuestionsRemaining}/${questionLimit} questions remaining`
+                : `${game.awayTeam} @ ${game.homeTeam} • 3 questions included`}
             </span>
           </div>
 
@@ -464,30 +636,14 @@ export default function ChatModal({
                   <div className="chat-paywall__copy">
                     <div className="chat-paywall__eyebrow">{promoActive ? "Launch Week Unlock" : "Deep Analysis Unlock"}</div>
                     <p className="chat-paywall__title">
-                      Start a deep analysis for {game.awayTeam} @ {game.homeTeam}.
+                      Discuss {game.awayTeam} @ {game.homeTeam} with AI.
                     </p>
                     <p className="chat-paywall__body">
                       {promoActive
-                        ? "3 questions included. Free launch access unlocks instantly after you enter your email."
-                        : "3 questions included. Unlock this room for $2 to get the engine view, risk framing, and pressure points."}
+                        ? "Write your question first, hit Send, then drop your email to unlock free launch access for this matchup."
+                        : "Write your question first. When you're ready, continue with email and unlock 3 questions for this specific matchup for $2."}
                     </p>
                   </div>
-
-                  {promoActive ? (
-                    <div className="space-y-2">
-                      <label className="input-label" htmlFor="chat-lead-email">Email required for free access</label>
-                      <input
-                        id="chat-lead-email"
-                        type="email"
-                        inputMode="email"
-                        autoComplete="email"
-                        value={leadEmail}
-                        onChange={(event) => setLeadEmail(event.target.value)}
-                        placeholder="you@lockinmail.com"
-                        className="input-field"
-                      />
-                    </div>
-                  ) : null}
 
                   <motion.button
                     type="button"
@@ -496,7 +652,7 @@ export default function ChatModal({
                     whileTap={{ scale: 0.98 }}
                     className="primary-button w-full justify-center"
                   >
-                    {promoActive ? "Ask AI Free" : "Unlock for $2"}
+                    {promoActive ? "Continue With Email" : "Unlock This Room"}
                   </motion.button>
                 </>
               ) : (
@@ -504,7 +660,7 @@ export default function ChatModal({
                   <div className="chat-paywall__copy">
                     <div className="chat-paywall__eyebrow">Question Limit Reached</div>
                     <p className="chat-paywall__title">Need more depth?</p>
-                    <p className="chat-paywall__body">Add 3 more questions for $1 and keep this room active.</p>
+                    <p className="chat-paywall__body">Add 3 more questions for this game for $1 and keep this room active.</p>
                   </div>
                   <motion.button
                     type="button"
@@ -513,26 +669,78 @@ export default function ChatModal({
                     whileTap={{ scale: 0.98 }}
                     className="secondary-button w-full justify-center"
                   >
-                    +3 more questions — $1
+                    +3 more questions for this game — $1
                   </motion.button>
                 </>
               )}
             </motion.div>
           )}
 
+          {showEmailCapture ? (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="chat-paywall"
+            >
+              <div className="chat-paywall__copy">
+                <div className="chat-paywall__eyebrow">{promoActive ? "Launch Access" : "Continue With Email"}</div>
+                <p className="chat-paywall__title">Drop your email to unlock AI analysis.</p>
+                <p className="chat-paywall__body">
+                  {promoActive
+                    ? "Free during launch week. No account needed."
+                    : "No account needed. Your first question will send automatically after checkout."}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="input-label" htmlFor="chat-lead-email">Email</label>
+                <input
+                  id="chat-lead-email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  value={leadEmail}
+                  onChange={(event) => setLeadEmail(event.target.value)}
+                  placeholder="you@lockinmail.com"
+                  className="input-field"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void continuePendingQuestion()}
+                  disabled={isUnlockingQuestion}
+                  className="primary-button w-full justify-center disabled:opacity-50"
+                >
+                  {isUnlockingQuestion ? "Continuing..." : "Continue"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowEmailCapture(false)}
+                  className="secondary-button w-full justify-center"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          ) : null}
+
           <div className="space-y-2">
-            <label className="input-label" htmlFor="chat-question">Your question</label>
+            <label className="input-label" htmlFor="chat-question">Ask anything about this matchup</label>
             <div className="flex gap-2">
-              <input
+              <textarea
                 id="chat-question"
                 ref={inputRef}
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask anything about this matchup..."
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
                 }}
-                disabled={!canSend}
-                className="input-field flex-1 disabled:opacity-40"
+                disabled={isInitializing || (isPaid && chatQuestionsRemaining <= 0)}
+                rows={2}
+                className="input-field min-h-[88px] flex-1 resize-none disabled:opacity-40"
               />
               <motion.button
                 type="button"
@@ -550,7 +758,11 @@ export default function ChatModal({
             </div>
             {!canSend && (
               <p className="text-[11px] text-[color:var(--silver-gray)]">
-                {isPaid ? "Buy more questions to keep the room active." : promoActive ? "Enter your email to unlock this room for free." : "Unlock the room to start asking."}
+                {isPaid
+                  ? "Buy more questions for this matchup to keep the room active."
+                  : promoActive
+                    ? "Type your first question and hit Send. We will ask for email on the next step."
+                    : "Type your first question and hit Send. Email and checkout happen after that."}
               </p>
             )}
           </div>
@@ -563,11 +775,11 @@ export default function ChatModal({
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.98 }}
               className="secondary-button mt-2.5 w-full justify-center"
-            >
+              >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
               </svg>
-              {isShareBusy ? "Generating card" : "Export share card"}
+              {isShareBusy ? "Generating..." : "Export share card"}
             </motion.button>
           )}
         </div>

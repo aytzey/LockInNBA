@@ -1,19 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import toast from "react-hot-toast";
-import type { TodayPrediction } from "./types";
-import { DAILY_TOKEN_KEY, LEAD_EMAIL_KEY, validateEmail } from "./utils";
-import { createCheckout, waitForCheckout, mockComplete } from "./api";
-import MarkdownContent from "./MarkdownContent";
+import DailyPickCard from "./DailyPickCard";
 import { LockinMark } from "./LockinBrand";
+import type { DailyPick, TodayPrediction } from "./types";
+import { DAILY_TOKEN_KEY, LEAD_EMAIL_KEY, validateEmail } from "./utils";
+import { createCheckout, mockComplete, waitForCheckout } from "./api";
 
 interface TonightsEdgeProps {
   prediction: TodayPrediction | null;
   isLoading: boolean;
   dailyUnlocked: boolean;
-  dailyMarkdown: string;
+  unlockedPicks: DailyPick[];
   onUnlock: (token: string) => Promise<void>;
   onScrollToGames: () => void;
   onShare: () => void;
@@ -22,61 +22,15 @@ interface TonightsEdgeProps {
   priceSubtext: string;
   noEdgeMessage: string;
   isPromoActive: boolean;
-  teaserGuardTerms: string[];
 }
 
-function containsSpoiler(text: string, terms: string[]): boolean {
-  const normalized = text.trim();
-  if (!normalized) {
-    return false;
-  }
-
-  if (/[A-Z]{2,4}\s*@\s*[A-Z]{2,4}/.test(normalized) || /\bvs\.?\b/i.test(normalized)) {
-    return true;
-  }
-
-  return terms.some((term) => {
-    const trimmed = term.trim();
-    if (!trimmed) {
-      return false;
-    }
-
-    if (trimmed.includes(" ")) {
-      return normalized.toLowerCase().includes(trimmed.toLowerCase());
-    }
-
-    const pattern = new RegExp(`\\b${trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
-    return pattern.test(normalized);
-  });
-}
-
-function splitTeaser(text: string, guardTerms: string[]): { headline: string; blurredLines: string[] } {
-  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
-  const spoilerDetected = containsSpoiler(lines.join(" "), guardTerms);
-  const headline = !spoilerDetected && lines.length > 0
-    ? lines.slice(0, 2).join(" ")
-    : "One game lit up every signal tonight. The math is screaming.";
-  const blurredLines = lines.slice(2);
-
-  if (!spoilerDetected && blurredLines.length > 0) {
-    return { headline, blurredLines };
-  }
-
-  return {
-    headline,
-    blurredLines: [
-      "Tonight the engine identified one board pocket where price, pace pressure, and lineup context refuse to agree.",
-      "Risk framing, bankroll sizing, and late-line sensitivity stay locked until the pass is opened.",
-      "Full unlock reveals the exact side, confidence stack, and the market trap we expect most people to miss.",
-    ],
-  };
-}
+const BLUR_LINE_WIDTHS = ["100%", "91%", "83%", "72%", "87%", "64%"];
 
 export default function TonightsEdge({
   prediction,
   isLoading,
   dailyUnlocked,
-  dailyMarkdown,
+  unlockedPicks,
   onUnlock,
   onScrollToGames,
   onShare,
@@ -85,16 +39,16 @@ export default function TonightsEdge({
   priceSubtext,
   noEdgeMessage,
   isPromoActive,
-  teaserGuardTerms,
 }: TonightsEdgeProps) {
-  const noEdge = Boolean(prediction?.isNoEdgeDay);
-  const hasPrediction = Boolean(prediction?.hasPrediction && prediction?.teaserText.trim());
-  const preview = splitTeaser((hasPrediction ? prediction?.teaserText : "") || "", teaserGuardTerms);
+  const noEdge = Boolean(prediction?.status === "no_edge" || prediction?.isNoEdgeDay);
+  const hasPrediction = Boolean(prediction?.status === "ready" && prediction?.hasPrediction);
+  const pickCount = Math.max(1, Math.min(prediction?.pickCount || 2, 3));
+
   return (
     <TonightsEdgeContent
       isLoading={isLoading}
       dailyUnlocked={dailyUnlocked}
-      dailyMarkdown={dailyMarkdown}
+      unlockedPicks={unlockedPicks}
       onUnlock={onUnlock}
       onScrollToGames={onScrollToGames}
       onShare={onShare}
@@ -104,7 +58,7 @@ export default function TonightsEdge({
       noEdgeMessage={noEdgeMessage}
       noEdge={noEdge}
       hasPrediction={hasPrediction}
-      preview={preview}
+      pickCount={pickCount}
       isPromoActive={isPromoActive}
     />
   );
@@ -113,7 +67,7 @@ export default function TonightsEdge({
 function TonightsEdgeContent({
   isLoading,
   dailyUnlocked,
-  dailyMarkdown,
+  unlockedPicks,
   onUnlock,
   onScrollToGames,
   onShare,
@@ -123,12 +77,12 @@ function TonightsEdgeContent({
   noEdgeMessage,
   noEdge,
   hasPrediction,
-  preview,
+  pickCount,
   isPromoActive,
 }: {
   isLoading: boolean;
   dailyUnlocked: boolean;
-  dailyMarkdown: string;
+  unlockedPicks: DailyPick[];
   onUnlock: (token: string) => Promise<void>;
   onScrollToGames: () => void;
   onShare: () => void;
@@ -138,12 +92,13 @@ function TonightsEdgeContent({
   noEdgeMessage: string;
   noEdge: boolean;
   hasPrediction: boolean;
-  preview: { headline: string; blurredLines: string[] };
+  pickCount: number;
   isPromoActive: boolean;
 }) {
   const [unlocking, setUnlocking] = useState(false);
   const [error, setError] = useState("");
   const [leadEmail, setLeadEmail] = useState("");
+  const [showLeadCapture, setShowLeadCapture] = useState(false);
 
   useEffect(() => {
     try {
@@ -166,12 +121,17 @@ function TonightsEdgeContent({
   }, [leadEmail]);
 
   async function handleCheckout() {
+    if (!hasPrediction) {
+      return;
+    }
+
     setUnlocking(true);
     setError("");
 
     try {
       const email = leadEmail.trim().toLowerCase();
       if (isPromoActive && !validateEmail(email)) {
+        setShowLeadCapture(true);
         throw new Error("Enter a valid email to unlock free access.");
       }
 
@@ -194,7 +154,9 @@ function TonightsEdgeContent({
         token = (await waitForCheckout(checkout.sessionId)).accessToken || "";
         try {
           popup.close();
-        } catch {}
+        } catch {
+          // noop
+        }
       }
 
       if (!token) {
@@ -204,6 +166,7 @@ function TonightsEdgeContent({
       window.localStorage.setItem(DAILY_TOKEN_KEY, token);
       await onUnlock(token);
       toast.success(isPromoActive ? "Free access unlocked." : "Daily edge unlocked.");
+      setShowLeadCapture(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Payment failed");
     } finally {
@@ -222,14 +185,31 @@ function TonightsEdgeContent({
             exit={{ opacity: 0, y: -18 }}
             className="space-y-6"
           >
-            <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)] px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[color:var(--money-green)] md:px-4 md:py-2 md:text-[11px]">
-              <span className="glow-dot" />
-              Daily edge unlocked
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--money-green-line)] bg-[color:var(--money-green-soft)] px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[color:var(--money-green)] md:px-4 md:py-2 md:text-[11px]">
+                <span className="glow-dot" />
+                {isPromoActive ? "Launch Week — Free Access" : "Daily Edge Unlocked"}
+              </div>
+              {isPromoActive ? (
+                <p className="text-sm text-[color:var(--silver-gray)]">
+                  Free during launch week. Regular price: $5/day.
+                </p>
+              ) : null}
             </div>
 
-            <div className="rounded-[1.25rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-4 py-4 md:rounded-[1.8rem] md:px-7 md:py-6">
-              <MarkdownContent content={dailyMarkdown} />
-            </div>
+            {unlockedPicks.length > 0 ? (
+              <div className="grid gap-3 md:gap-5 xl:grid-cols-2">
+                {unlockedPicks.map((pick) => (
+                  <DailyPickCard key={pick.id} pick={pick} />
+                ))}
+              </div>
+            ) : (
+              <div className="pending-card">
+                <div className="pending-card__eyebrow">LOCK STATUS</div>
+                <h1 className="heading pending-card__title">Today&apos;s edge is still being prepared.</h1>
+                <p className="pending-card__body">Check back at 2 PM ET.</p>
+              </div>
+            )}
 
             <button
               type="button"
@@ -237,7 +217,7 @@ function TonightsEdgeContent({
               disabled={isShareBusy}
               className="secondary-button justify-center"
             >
-              {isShareBusy ? "Generating share card..." : "Export share card"}
+              {isShareBusy ? "Generating..." : "Export share card"}
             </button>
           </motion.div>
         ) : noEdge ? (
@@ -258,56 +238,75 @@ function TonightsEdgeContent({
               Browse AI matchups
             </button>
           </motion.div>
-        ) : !hasPrediction && !isLoading ? (
-          <motion.div
-            key="pending"
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -18 }}
-            className="pending-card"
-          >
-            <div className="pending-card__eyebrow">LOCK STATUS</div>
-            <h1 className="heading pending-card__title">Today&apos;s picks are being locked in.</h1>
-            <p className="pending-card__body">Check back at 2 PM EST.</p>
-          </motion.div>
         ) : (
           <motion.div
-            key="locked"
+            key={hasPrediction ? "locked-ready" : "locked-pending"}
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -18 }}
             className="space-y-4 md:space-y-6"
           >
-            <div className="hero-preview">
-              <h1 className="heading hero-preview__headline">{preview.headline}</h1>
+            <div className="hero-preview hero-preview--minimal">
               <div className="hero-preview__blur-shell">
                 <div className="hero-preview__brandwash" aria-hidden="true">
                   <LockinMark className="h-full w-full" />
                 </div>
-                <div className="hero-preview__blur-stack blurred space-y-2 md:space-y-3">
-                  {preview.blurredLines.map((line, index) => (
-                    <p key={index} className="hero-preview__blur-line text-sm md:text-base">
-                      {line}
-                    </p>
-                  ))}
-                </div>
+
+                {hasPrediction ? (
+                  <div className="hero-preview__pick-stack blurred" aria-hidden="true">
+                    {Array.from({ length: pickCount }).map((_, index) => (
+                      <div key={index} className="hero-preview__pick-shell">
+                        <div className="hero-preview__pick-header">
+                          <span className="hero-preview__pick-pill" />
+                          <span className="hero-preview__pick-badge" />
+                        </div>
+                        <div className="hero-preview__pick-identity">
+                          <span className="hero-preview__pick-logo" />
+                          <span className="hero-preview__pick-line hero-preview__pick-line--short" />
+                        </div>
+                        <div className="hero-preview__pick-market">
+                          <span className="hero-preview__pick-line hero-preview__pick-line--medium" />
+                          <span className="hero-preview__pick-line hero-preview__pick-line--shorter" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="hero-preview__blur-stack blurred space-y-2 md:space-y-3" aria-hidden="true">
+                    {BLUR_LINE_WIDTHS.map((width, index) => (
+                      <p
+                        key={index}
+                        className="hero-preview__blur-line text-sm md:text-base"
+                        style={{ maxWidth: width }}
+                      >
+                        Analysis complete. One side carries a statistical edge the market has not fully priced.
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
             <button
               type="button"
               onClick={handleCheckout}
-              disabled={unlocking}
-              className="primary-button primary-button--hero justify-center"
+              disabled={unlocking || !hasPrediction || isLoading}
+              className="primary-button primary-button--hero justify-center disabled:opacity-45"
             >
-              {unlocking ? (isPromoActive ? "Opening free access..." : "Processing secure unlock...") : ctaText}
+              {unlocking
+                ? (isPromoActive ? "Opening free access..." : "Processing secure unlock...")
+                : hasPrediction
+                  ? ctaText
+                  : "Today's edge is being prepared"}
             </button>
 
-            <p className="hero-price-whisper">{priceSubtext}</p>
+            <p className="hero-price-whisper">
+              {hasPrediction ? priceSubtext : "Check back at 2 PM ET."}
+            </p>
 
-            {isPromoActive ? (
+            {showLeadCapture && isPromoActive && hasPrediction ? (
               <div className="hero-lead-capture">
-                <label className="input-label" htmlFor="hero-lead-email">Email required for launch week access</label>
+                <label className="input-label" htmlFor="hero-lead-email">Email required for free launch access</label>
                 <div className="hero-lead-capture__row">
                   <input
                     id="hero-lead-email"
@@ -319,7 +318,14 @@ function TonightsEdgeContent({
                     placeholder="you@lockinmail.com"
                     className="input-field"
                   />
-                  <span className="hero-lead-capture__badge">FREE</span>
+                  <button
+                    type="button"
+                    onClick={handleCheckout}
+                    disabled={unlocking}
+                    className="hero-lead-capture__badge"
+                  >
+                    Continue
+                  </button>
                 </div>
               </div>
             ) : null}

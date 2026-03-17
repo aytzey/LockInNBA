@@ -28,6 +28,7 @@ export async function PUT(request: NextRequest) {
     headerRightText: body?.headerRightText,
     metaDescription: body?.metaDescription,
     footerDisclaimer: body?.footerDisclaimer,
+    trackRecordMarkdown: body?.trackRecordMarkdown,
   });
 
   return NextResponse.json({ siteCopy });

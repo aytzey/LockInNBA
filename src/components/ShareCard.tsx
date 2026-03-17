@@ -4,6 +4,7 @@ import { forwardRef } from "react";
 import type { Game, ChatMessage } from "./types";
 import { moneyline } from "./utils";
 import { LockinBrand, LockinMark } from "./LockinBrand";
+import MarkdownContent from "./MarkdownContent";
 
 interface ShareCardProps {
   mode: "daily" | "chat";
@@ -19,9 +20,10 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
 ) {
   return (
     <div
+      id="share-card-surface"
       aria-hidden="true"
       ref={ref}
-      className="fixed left-[-9999px] top-[-9999px] z-0 w-[760px] bg-[#0a0e1a] p-0 text-sm"
+      className="fixed left-[-9999px] top-0 z-0 w-[760px] bg-[#0a0e1a] p-0 text-sm"
     >
       <div className="h-1 bg-gradient-to-r from-[#0a0e1a] via-[#00c853] to-[#0a0e1a]" />
 
@@ -40,7 +42,7 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
             <div className="heading mb-3 text-2xl font-bold text-[#f5f5f3]">LOCKIN Daily Edge</div>
             <div className="mb-4 text-sm text-[#8b92a5]">{headline}</div>
             <div className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
-              <p className="whitespace-pre-wrap leading-relaxed text-[#f5f5f3]">{dailyMarkdown}</p>
+              <MarkdownContent content={dailyMarkdown} className="text-sm" />
             </div>
           </div>
         ) : (
@@ -62,13 +64,16 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
               </div>
             )}
             <div className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
-              <p className="whitespace-pre-wrap leading-relaxed text-[#f5f5f3]">
-                {chatMessages
-                  .filter((item) => item.role === "assistant")
-                  .slice(-1)
-                  .map((msg) => msg.content)
-                  .join("\n") || "No assistant response is available for export yet."}
-              </p>
+              <MarkdownContent
+                content={
+                  chatMessages
+                    .filter((item) => item.role === "assistant")
+                    .slice(-1)
+                    .map((msg) => msg.content)
+                    .join("\n") || "No assistant response is available for export yet."
+                }
+                className="text-sm"
+              />
             </div>
           </div>
         )}

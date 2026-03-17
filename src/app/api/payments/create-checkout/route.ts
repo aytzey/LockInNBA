@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrCreateTodayPrediction } from "@/lib/daily-edge";
-import { completeCheckout, createCheckoutSession, getActivePromoBanner } from "@/lib/store";
+import { completeCheckout, createCheckoutSession, getActivePromoBanner, getPublicDailyEdgePreview } from "@/lib/store";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isLemonSqueezyConfigured, createLemonCheckout } from "@/lib/lemonsqueezy";
 import { issueAccessToken } from "@/lib/token";
@@ -33,8 +32,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Missing gameId" }, { status: 400 });
   }
 
-  if (type === "daily_pick" && (await getOrCreateTodayPrediction()).isNoEdgeDay) {
-    return NextResponse.json({ message: "No edge day" }, { status: 403 });
+  if (type === "daily_pick") {
+    const preview = await getPublicDailyEdgePreview();
+    if (preview.isNoEdgeDay) {
+      return NextResponse.json({ message: "No edge day" }, { status: 403 });
+    }
+    if (!preview.hasPrediction) {
+      return NextResponse.json({ message: "Today's edge is still being prepared" }, { status: 403 });
+    }
   }
 
   const activePromo = await getActivePromoBanner();

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrCreateTodayPrediction } from "@/lib/daily-edge";
-import { validateDailyToken } from "@/lib/store";
+import { getUnlockedDailyEdge, validateDailyToken } from "@/lib/store";
 import { getEstDateKey } from "@/lib/time";
 import { verifyAccessToken, parseBearerToken } from "@/lib/token";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -29,13 +28,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "No active payment found" }, { status: 403 });
   }
 
-  const prediction = await getOrCreateTodayPrediction(date);
-  if (prediction.isNoEdgeDay) {
+  const unlockedEdge = await getUnlockedDailyEdge(date);
+  if (unlockedEdge.preview.isNoEdgeDay) {
     return NextResponse.json({ message: "No edge day" }, { status: 403 });
+  }
+  if (!unlockedEdge.preview.hasPrediction || unlockedEdge.picks.length === 0) {
+    return NextResponse.json({ message: "Today's edge is still being prepared" }, { status: 403 });
   }
 
   return NextResponse.json({
-    markdown: prediction.markdownContent,
+    picks: unlockedEdge.picks,
+    markdown: unlockedEdge.markdown,
     source: "verified-session",
   });
 }

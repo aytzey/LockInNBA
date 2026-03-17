@@ -27,9 +27,23 @@ export type Game = {
 
 export type TodayPrediction = {
   date: string;
+  status: "pending" | "ready" | "no_edge";
   isNoEdgeDay: boolean;
-  teaserText: string;
   hasPrediction: boolean;
+  pickCount: number;
+};
+
+export type DailyPick = {
+  id: string;
+  date: string;
+  gameId: string;
+  pickedSide: "away" | "home";
+  analysisMarkdown: string;
+  result: "pending" | "win" | "loss";
+  profitUnits: number | null;
+  createdAt: string;
+  updatedAt: string;
+  game: Game | null;
 };
 
 export type SiteCopy = {
@@ -39,6 +53,7 @@ export type SiteCopy = {
   headerRightText: string;
   metaDescription: string;
   footerDisclaimer: string;
+  trackRecordMarkdown: string;
 };
 
 export type PromoBanner = {

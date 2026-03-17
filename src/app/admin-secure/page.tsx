@@ -1,18 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import DailyPickCard from "@/components/DailyPickCard";
 import MarkdownContent from "@/components/MarkdownContent";
 import SocialProofBanner from "@/components/SocialProofBanner";
-
-type AdminPrediction = {
-  id: string;
-  date: string;
-  teaserText: string;
-  markdownContent: string;
-  isNoEdgeDay: boolean;
-  source: "auto" | "admin";
-  createdAt: string;
-};
+import TrackRecord from "@/components/TrackRecord";
 
 type SystemPrompt = {
   id: string;
@@ -29,6 +21,7 @@ type SiteCopy = {
   headerRightText: string;
   metaDescription: string;
   footerDisclaimer: string;
+  trackRecordMarkdown: string;
 };
 
 type PromoBanner = {
@@ -40,10 +33,30 @@ type PromoBanner = {
 
 type AdminGame = {
   id: string;
+  date: string;
   awayTeam: string;
   homeTeam: string;
+  awayDisplayName: string;
+  awayRecord: string;
+  awayLeader: string;
+  awayLogo: string;
+  awayMoneyline: number;
+  homeDisplayName: string;
+  homeRecord: string;
+  homeLeader: string;
+  homeLogo: string;
+  homeMoneyline: number;
   gameTimeEST: string;
   status: "upcoming" | "live" | "final";
+  statusDetail: string;
+  awayScore: number | null;
+  homeScore: number | null;
+  oddsSource: "DraftKings" | "FanDuel" | "BetMGM";
+  spread: string;
+  total: string;
+  broadcast: string;
+  venue: string;
+  gameUrl: string;
 };
 
 type MatchMarkdown = {
@@ -55,6 +68,43 @@ type MatchMarkdown = {
   updatedAt: string;
 };
 
+type AdminDailyPick = {
+  id: string;
+  date: string;
+  gameId: string;
+  pickedSide: "away" | "home";
+  analysisMarkdown: string;
+  result: "pending" | "win" | "loss";
+  profitUnits: number | null;
+  createdAt: string;
+  updatedAt: string;
+  game: AdminGame | null;
+};
+
+type DailySlateSummary = {
+  date: string;
+  status: "pending" | "ready" | "no_edge";
+  isNoEdgeDay: boolean;
+  pickCount: number;
+  updatedAt: string;
+};
+
+type DailyEdgePreview = {
+  date: string;
+  status: "pending" | "ready" | "no_edge";
+  hasPrediction: boolean;
+  isNoEdgeDay: boolean;
+  pickCount: number;
+};
+
+type PickFormState = {
+  enabled: boolean;
+  pickedSide: "away" | "home";
+  analysisMarkdown: string;
+  result: "pending" | "win" | "loss";
+  profitUnits: string;
+};
+
 const ADMIN_TOKEN_KEY = "lockin_admin_token";
 const DEFAULT_SITE_COPY: SiteCopy = {
   dailyCtaText: "Unlock Tonight's Edge",
@@ -64,6 +114,7 @@ const DEFAULT_SITE_COPY: SiteCopy = {
   metaDescription: "LOCKIN is a premium AI sports analytics platform delivering nightly NBA moneyline analysis and per-game statistical insights.",
   footerDisclaimer:
     "For entertainment purposes only. LOCKIN does not accept wagers or guarantee outcomes. If you or someone you know has a gambling problem, call 1-800-GAMBLER.",
+  trackRecordMarkdown: "",
 };
 const DEFAULT_PROMO_BANNER: PromoBanner = {
   isActive: false,
@@ -126,7 +177,32 @@ function formatGameTime(gameTimeEST: string): string {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
-  });
+  }) + " ET";
+}
+
+function buildPickState(games: AdminGame[], picks: AdminDailyPick[]): Record<string, PickFormState> {
+  const nextState = games.reduce<Record<string, PickFormState>>((acc, game) => {
+    acc[game.id] = {
+      enabled: false,
+      pickedSide: "away",
+      analysisMarkdown: "",
+      result: "pending",
+      profitUnits: "",
+    };
+    return acc;
+  }, {});
+
+  for (const pick of picks) {
+    nextState[pick.gameId] = {
+      enabled: true,
+      pickedSide: pick.pickedSide,
+      analysisMarkdown: pick.analysisMarkdown || "",
+      result: pick.result,
+      profitUnits: pick.profitUnits === null ? "" : String(pick.profitUnits),
+    };
+  }
+
+  return nextState;
 }
 
 export default function AdminSecurePage() {
@@ -136,14 +212,16 @@ export default function AdminSecurePage() {
   const [password, setPassword] = useState("");
   const [loginMessage, setLoginMessage] = useState("");
 
-  const [predictions, setPredictions] = useState<AdminPrediction[]>([]);
-  const [selectedPredictionId, setSelectedPredictionId] = useState("");
   const [predictionDate, setPredictionDate] = useState(estDateInputValue());
-  const [teaserText, setTeaserText] = useState("");
-  const [markdownContent, setMarkdownContent] = useState("");
+  const [dailyPickGames, setDailyPickGames] = useState<AdminGame[]>([]);
+  const [dailyPickEntries, setDailyPickEntries] = useState<Record<string, PickFormState>>({});
+  const [savedSlates, setSavedSlates] = useState<DailySlateSummary[]>([]);
+  const [predictionPreview, setPredictionPreview] = useState<DailyEdgePreview | null>(null);
+  const [autoTrackRecordMarkdown, setAutoTrackRecordMarkdown] = useState("");
   const [isNoEdgeDay, setIsNoEdgeDay] = useState(false);
   const [predictionMessage, setPredictionMessage] = useState("");
   const [predictionSaving, setPredictionSaving] = useState(false);
+  const [predictionLoading, setPredictionLoading] = useState(false);
 
   const [matchMarkdownGames, setMatchMarkdownGames] = useState<AdminGame[]>([]);
   const [matchMarkdowns, setMatchMarkdowns] = useState<Record<string, string>>({});
@@ -165,7 +243,7 @@ export default function AdminSecurePage() {
   const [promptText, setPromptText] = useState("");
   const [promptMessage, setPromptMessage] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"predictions" | "social" | "copy" | "promo" | "prompt">("predictions");
+  const [activeTab, setActiveTab] = useState<"predictions" | "social" | "track" | "copy" | "promo" | "prompt">("predictions");
 
   const socialProofMessages = useMemo(() => parseMessageInput(socialProofText), [socialProofText]);
 
@@ -173,6 +251,43 @@ export default function AdminSecurePage() {
     window.localStorage.removeItem(ADMIN_TOKEN_KEY);
     setToken(null);
   }, []);
+
+  const loadDailyPickSlate = useCallback(async (tokenValue: string, dateValue: string) => {
+    setPredictionLoading(true);
+    setPredictionMessage("");
+
+    try {
+      const response = await fetch(`/api/admin/daily-picks?date=${dateValue}`, {
+        headers: addAuthHeader(tokenValue),
+      });
+
+      if (response.status === 401) {
+        clearStoredAuth();
+        setChecking(false);
+        return;
+      }
+
+      const body = await response.json();
+      if (!response.ok) {
+        setPredictionMessage(body.message || "Could not load daily picks.");
+        return;
+      }
+
+      const nextGames = Array.isArray(body.games) ? (body.games as AdminGame[]) : [];
+      const nextPicks = Array.isArray(body.picks) ? (body.picks as AdminDailyPick[]) : [];
+
+      setDailyPickGames(nextGames);
+      setDailyPickEntries(buildPickState(nextGames, nextPicks));
+      setPredictionPreview((body.preview as DailyEdgePreview | null) || null);
+      setSavedSlates(Array.isArray(body.slates) ? (body.slates as DailySlateSummary[]) : []);
+      setAutoTrackRecordMarkdown((body.trackRecordMarkdown || "").toString());
+      setIsNoEdgeDay(Boolean(body.preview?.status === "no_edge" || body.preview?.isNoEdgeDay));
+    } catch {
+      setPredictionMessage("Could not load daily picks.");
+    } finally {
+      setPredictionLoading(false);
+    }
+  }, [clearStoredAuth]);
 
   const loadMatchMarkdowns = useCallback(async (tokenValue: string, dateValue: string) => {
     setMatchMarkdownLoading(true);
@@ -218,29 +333,36 @@ export default function AdminSecurePage() {
     }
 
     try {
-      const [predictionsResponse, proofResponse, promptResponse, siteCopyResponse, promoResponse] = await Promise.all([
-        fetch("/api/admin/predictions", { headers: addAuthHeader(tokenValue) }),
+      const [dailyPicksResponse, proofResponse, promptResponse, siteCopyResponse, promoResponse] = await Promise.all([
+        fetch(`/api/admin/daily-picks?date=${predictionDate}`, { headers: addAuthHeader(tokenValue) }),
         fetch("/api/admin/social-proof-banner", { headers: addAuthHeader(tokenValue) }),
         fetch("/api/admin/system-prompt", { headers: addAuthHeader(tokenValue) }),
         fetch("/api/admin/site-copy", { headers: addAuthHeader(tokenValue) }),
         fetch("/api/admin/promo-banner", { headers: addAuthHeader(tokenValue) }),
       ]);
 
-      if ([predictionsResponse, proofResponse, promptResponse, siteCopyResponse, promoResponse].some((response) => response.status === 401)) {
+      if ([dailyPicksResponse, proofResponse, promptResponse, siteCopyResponse, promoResponse].some((response) => response.status === 401)) {
         clearStoredAuth();
         setChecking(false);
         return;
       }
 
-      const [predictionsBody, proofBody, promptBody, siteCopyBody, promoBody] = await Promise.all([
-        predictionsResponse.json(),
+      const [dailyPicksBody, proofBody, promptBody, siteCopyBody, promoBody] = await Promise.all([
+        dailyPicksResponse.json(),
         proofResponse.json(),
         promptResponse.json(),
         siteCopyResponse.json(),
         promoResponse.json(),
       ]);
 
-      setPredictions(predictionsBody.predictions || []);
+      const nextGames = Array.isArray(dailyPicksBody.games) ? (dailyPicksBody.games as AdminGame[]) : [];
+      const nextPicks = Array.isArray(dailyPicksBody.picks) ? (dailyPicksBody.picks as AdminDailyPick[]) : [];
+      setDailyPickGames(nextGames);
+      setDailyPickEntries(buildPickState(nextGames, nextPicks));
+      setPredictionPreview((dailyPicksBody.preview as DailyEdgePreview | null) || null);
+      setSavedSlates(Array.isArray(dailyPicksBody.slates) ? (dailyPicksBody.slates as DailySlateSummary[]) : []);
+      setAutoTrackRecordMarkdown((dailyPicksBody.trackRecordMarkdown || "").toString());
+      setIsNoEdgeDay(Boolean(dailyPicksBody.preview?.status === "no_edge" || dailyPicksBody.preview?.isNoEdgeDay));
       setSocialProofText(
         Array.isArray(proofBody.messages) && proofBody.messages.length > 0
           ? proofBody.messages.join("\n")
@@ -255,6 +377,7 @@ export default function AdminSecurePage() {
         headerRightText: siteCopyBody.siteCopy?.headerRightText || DEFAULT_SITE_COPY.headerRightText,
         metaDescription: siteCopyBody.siteCopy?.metaDescription || DEFAULT_SITE_COPY.metaDescription,
         footerDisclaimer: siteCopyBody.siteCopy?.footerDisclaimer || DEFAULT_SITE_COPY.footerDisclaimer,
+        trackRecordMarkdown: siteCopyBody.siteCopy?.trackRecordMarkdown || DEFAULT_SITE_COPY.trackRecordMarkdown,
       });
       setPromoBanner({
         isActive: promoBody.promoBanner?.isActive ?? DEFAULT_PROMO_BANNER.isActive,
@@ -267,7 +390,7 @@ export default function AdminSecurePage() {
     } finally {
       setChecking(false);
     }
-  }, [clearStoredAuth]);
+  }, [clearStoredAuth, predictionDate]);
 
   useEffect(() => {
     const savedToken = window.localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -285,26 +408,9 @@ export default function AdminSecurePage() {
       return;
     }
 
+    void loadDailyPickSlate(token, predictionDate);
     void loadMatchMarkdowns(token, predictionDate);
-  }, [loadMatchMarkdowns, predictionDate, token]);
-
-  function selectPrediction(prediction: AdminPrediction) {
-    setSelectedPredictionId(prediction.id);
-    setPredictionDate(prediction.date);
-    setTeaserText(prediction.teaserText);
-    setMarkdownContent(prediction.markdownContent);
-    setIsNoEdgeDay(prediction.isNoEdgeDay);
-    setPredictionMessage("");
-  }
-
-  function clearPredictionForm() {
-    setSelectedPredictionId("");
-    setPredictionDate(estDateInputValue());
-    setTeaserText("");
-    setMarkdownContent("");
-    setIsNoEdgeDay(false);
-    setPredictionMessage("");
-  }
+  }, [loadDailyPickSlate, loadMatchMarkdowns, predictionDate, token]);
 
   async function handleLogin() {
     setLoginMessage("");
@@ -333,29 +439,50 @@ export default function AdminSecurePage() {
     }
   }
 
+  function clearDailyPickSlate() {
+    setDailyPickEntries(buildPickState(dailyPickGames, []));
+    setIsNoEdgeDay(false);
+    setPredictionPreview({
+      date: predictionDate,
+      status: "pending",
+      hasPrediction: false,
+      isNoEdgeDay: false,
+      pickCount: 0,
+    });
+    setPredictionMessage("");
+  }
+
   async function savePrediction() {
     if (!token) return;
 
     setPredictionMessage("");
-    if (!predictionDate || (!isNoEdgeDay && (!teaserText.trim() || !markdownContent.trim()))) {
-      setPredictionMessage("Date is required. Hero teaser and markdown are required unless No Edge day is enabled.");
+    if (!predictionDate) {
+      setPredictionMessage("Date is required.");
       return;
     }
 
     setPredictionSaving(true);
     try {
-      const res = await fetch("/api/admin/predictions", {
-        method: "POST",
+      const picks = Object.entries(dailyPickEntries)
+        .filter(([, entry]) => entry.enabled)
+        .map(([gameId, entry]) => ({
+          gameId,
+          pickedSide: entry.pickedSide,
+          analysisMarkdown: entry.analysisMarkdown,
+          result: entry.result,
+          profitUnits: entry.profitUnits.trim() ? Number(entry.profitUnits) : null,
+        }));
+
+      const res = await fetch("/api/admin/daily-picks", {
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
           ...addAuthHeader(token),
         },
         body: JSON.stringify({
-          id: selectedPredictionId || undefined,
           date: predictionDate,
-          teaserText,
-          markdownContent,
           isNoEdgeDay,
+          picks,
         }),
       });
       const data = await res.json();
@@ -364,45 +491,17 @@ export default function AdminSecurePage() {
         return;
       }
 
-      setPredictionMessage("Prediction saved.");
-      setSelectedPredictionId(data.prediction.id);
-      await bootstrapAdmin(token);
-      selectPrediction(data.prediction);
+      setPredictionPreview((data.preview as DailyEdgePreview | null) || null);
+      setSavedSlates(Array.isArray(data.slates) ? (data.slates as DailySlateSummary[]) : []);
+      setAutoTrackRecordMarkdown((data.trackRecordMarkdown || "").toString());
+      const nextPicks = Array.isArray(data.picks) ? (data.picks as AdminDailyPick[]) : [];
+      setDailyPickEntries(buildPickState(dailyPickGames, nextPicks));
+      setIsNoEdgeDay(Boolean(data.preview?.status === "no_edge" || data.preview?.isNoEdgeDay));
+      setPredictionMessage("Daily edge saved.");
     } catch {
       setPredictionMessage("Save failed due to network error.");
     } finally {
       setPredictionSaving(false);
-    }
-  }
-
-  async function deletePrediction(id: string) {
-    if (!token) return;
-    if (!confirm("Delete this prediction?")) return;
-
-    setPredictionMessage("");
-    try {
-      const res = await fetch("/api/admin/predictions", {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          ...addAuthHeader(token),
-        },
-        body: JSON.stringify({ id }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setPredictionMessage(data.message || "Delete failed.");
-        return;
-      }
-
-      if (selectedPredictionId === id) {
-        clearPredictionForm();
-      }
-
-      setPredictionMessage("Prediction deleted.");
-      await bootstrapAdmin(token);
-    } catch {
-      setPredictionMessage("Delete failed due to network error.");
     }
   }
 
@@ -501,6 +600,7 @@ export default function AdminSecurePage() {
         headerRightText: data.siteCopy?.headerRightText || DEFAULT_SITE_COPY.headerRightText,
         metaDescription: data.siteCopy?.metaDescription || DEFAULT_SITE_COPY.metaDescription,
         footerDisclaimer: data.siteCopy?.footerDisclaimer || DEFAULT_SITE_COPY.footerDisclaimer,
+        trackRecordMarkdown: data.siteCopy?.trackRecordMarkdown || DEFAULT_SITE_COPY.trackRecordMarkdown,
       });
       setSiteCopyMessage("Site copy updated.");
     } catch {
@@ -629,8 +729,9 @@ export default function AdminSecurePage() {
   }
 
   const tabs = [
-    { id: "predictions" as const, label: "Predictions" },
+    { id: "predictions" as const, label: "Daily Picks" },
     { id: "social" as const, label: "Social Proof" },
+    { id: "track" as const, label: "Track Record" },
     { id: "copy" as const, label: "Site Copy" },
     { id: "promo" as const, label: "Promo" },
     { id: "prompt" as const, label: "System Prompt" },
@@ -672,8 +773,8 @@ export default function AdminSecurePage() {
               <section className="admin-section">
                 <div className="admin-section__header">
                   <div>
-                    <div className="admin-eyebrow">{selectedPredictionId ? "EDITING" : "NEW ENTRY"}</div>
-                    <h2 className="heading text-xl text-[color:var(--pure-white)]">Daily Prediction</h2>
+                    <div className="admin-eyebrow">DAILY EDGE</div>
+                    <h2 className="heading text-xl text-[color:var(--pure-white)]">Pick Builder</h2>
                   </div>
                 </div>
 
@@ -700,49 +801,201 @@ export default function AdminSecurePage() {
                     </label>
                   </div>
 
-                  <div>
-                    <label className="input-label" htmlFor="prediction-teaser">Hero Teaser</label>
-                    <p className="admin-help">Keep this mysterious. No team names, no spoiler language.</p>
-                    <textarea
-                      id="prediction-teaser"
-                      value={teaserText}
-                      onChange={(event) => setTeaserText(event.target.value)}
-                      rows={3}
-                      className="input-field mt-2 resize-none"
-                    />
+                  <div className="admin-preview p-4">
+                    <p className="text-sm text-[color:var(--pure-white)]">
+                      {predictionPreview?.status === "ready"
+                        ? `${predictionPreview.pickCount} pick${predictionPreview.pickCount === 1 ? "" : "s"} ready for this date.`
+                        : predictionPreview?.status === "no_edge"
+                          ? "This date is marked as a PASS / no-edge day."
+                          : "No public edge is live for this date yet."}
+                    </p>
+                    <p className="mt-2 text-[11px] leading-5 text-[color:var(--silver-gray)]">
+                      Pick selected games, choose the side, add optional public analysis, then save once. Leaving everything empty and saving clears the day back to pending.
+                    </p>
                   </div>
 
-                  <div>
-                    <label className="input-label" htmlFor="prediction-markdown">Paid Markdown</label>
-                    <p className="admin-help">Left side is raw markdown. Right side previews the unlocked card exactly.</p>
-                    <div className="mt-2 grid gap-4 xl:grid-cols-2">
-                      <textarea
-                        id="prediction-markdown"
-                        value={markdownContent}
-                        onChange={(event) => setMarkdownContent(event.target.value)}
-                        rows={18}
-                        className="input-field mono resize-y text-sm"
-                      />
-                      <div className="admin-preview">
-                        {markdownContent.trim() ? (
-                          <MarkdownContent content={markdownContent} />
-                        ) : (
-                          <p className="text-sm text-[color:var(--silver-gray)]">Preview updates as you write.</p>
-                        )}
-                      </div>
+                  {predictionLoading ? (
+                    <div className="admin-preview p-4 text-sm text-[color:var(--silver-gray)]">
+                      Loading slate for {predictionDate}...
                     </div>
-                  </div>
+                  ) : dailyPickGames.length === 0 ? (
+                    <div className="admin-preview p-4 text-sm text-[color:var(--silver-gray)]">
+                      No games found for this date yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {dailyPickGames.map((game) => {
+                        const entry = dailyPickEntries[game.id] || {
+                          enabled: false,
+                          pickedSide: "away" as const,
+                          analysisMarkdown: "",
+                          result: "pending" as const,
+                          profitUnits: "",
+                        };
+
+                        return (
+                          <div key={game.id} className="admin-list-item space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <div className="heading text-lg text-[color:var(--pure-white)]">{formatGameLabel(game)}</div>
+                                <p className="mt-1 text-[11px] text-[color:var(--silver-gray)]">
+                                  {formatGameTime(game.gameTimeEST)} • {game.awayTeam} {game.awayMoneyline > 0 ? `+${game.awayMoneyline}` : game.awayMoneyline} • {game.homeTeam} {game.homeMoneyline > 0 ? `+${game.homeMoneyline}` : game.homeMoneyline} • via {game.oddsSource}
+                                </p>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setDailyPickEntries((current) => ({
+                                    ...current,
+                                    [game.id]: {
+                                      ...(current[game.id] || entry),
+                                      enabled: !(current[game.id]?.enabled ?? entry.enabled),
+                                    },
+                                  }))
+                                }
+                                className={entry.enabled ? "primary-button justify-center" : "secondary-button justify-center"}
+                              >
+                                {entry.enabled ? "Picked" : "Pick This Game"}
+                              </button>
+                            </div>
+
+                            {entry.enabled ? (
+                              <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+                                <div className="space-y-4">
+                                  <div className="grid gap-3 md:grid-cols-2">
+                                    <label className="admin-toggle">
+                                      <input
+                                        type="radio"
+                                        checked={entry.pickedSide === "away"}
+                                        onChange={() =>
+                                          setDailyPickEntries((current) => ({
+                                            ...current,
+                                            [game.id]: {
+                                              ...(current[game.id] || entry),
+                                              pickedSide: "away",
+                                            },
+                                          }))
+                                        }
+                                      />
+                                      <span>{game.awayTeam} wins</span>
+                                    </label>
+
+                                    <label className="admin-toggle">
+                                      <input
+                                        type="radio"
+                                        checked={entry.pickedSide === "home"}
+                                        onChange={() =>
+                                          setDailyPickEntries((current) => ({
+                                            ...current,
+                                            [game.id]: {
+                                              ...(current[game.id] || entry),
+                                              pickedSide: "home",
+                                            },
+                                          }))
+                                        }
+                                      />
+                                      <span>{game.homeTeam} wins</span>
+                                    </label>
+                                  </div>
+
+                                  <div>
+                                    <label className="input-label" htmlFor={`pick-analysis-${game.id}`}>Short public analysis</label>
+                                    <textarea
+                                      id={`pick-analysis-${game.id}`}
+                                      value={entry.analysisMarkdown}
+                                      onChange={(event) =>
+                                        setDailyPickEntries((current) => ({
+                                          ...current,
+                                          [game.id]: {
+                                            ...(current[game.id] || entry),
+                                            analysisMarkdown: event.target.value,
+                                          },
+                                        }))
+                                      }
+                                      rows={6}
+                                      className="input-field mono mt-2 resize-y text-sm"
+                                      placeholder="Optional public reasoning shown on the unlocked pick card."
+                                    />
+                                  </div>
+
+                                  <div className="grid gap-3 md:grid-cols-2">
+                                    <div>
+                                      <label className="input-label" htmlFor={`pick-result-${game.id}`}>Result</label>
+                                      <select
+                                        id={`pick-result-${game.id}`}
+                                        value={entry.result}
+                                        onChange={(event) =>
+                                          setDailyPickEntries((current) => ({
+                                            ...current,
+                                            [game.id]: {
+                                              ...(current[game.id] || entry),
+                                              result: event.target.value as PickFormState["result"],
+                                            },
+                                          }))
+                                        }
+                                        className="input-field mt-2"
+                                      >
+                                        <option value="pending">Pending</option>
+                                        <option value="win">Win</option>
+                                        <option value="loss">Loss</option>
+                                      </select>
+                                    </div>
+
+                                    <div>
+                                      <label className="input-label" htmlFor={`pick-profit-${game.id}`}>Profit units</label>
+                                      <input
+                                        id={`pick-profit-${game.id}`}
+                                        value={entry.profitUnits}
+                                        onChange={(event) =>
+                                          setDailyPickEntries((current) => ({
+                                            ...current,
+                                            [game.id]: {
+                                              ...(current[game.id] || entry),
+                                              profitUnits: event.target.value,
+                                            },
+                                          }))
+                                        }
+                                        className="input-field mt-2"
+                                        placeholder="+2.4"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <DailyPickCard
+                                  pick={{
+                                    id: `preview-${game.id}`,
+                                    date: predictionDate,
+                                    gameId: game.id,
+                                    pickedSide: entry.pickedSide,
+                                    analysisMarkdown: entry.analysisMarkdown,
+                                    result: entry.result,
+                                    profitUnits: entry.profitUnits.trim() ? Number(entry.profitUnits) : null,
+                                    createdAt: new Date().toISOString(),
+                                    updatedAt: new Date().toISOString(),
+                                    game,
+                                  }}
+                                  showResultMeta
+                                />
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   <div className="flex flex-wrap gap-3">
                     <button
                       type="button"
                       onClick={savePrediction}
-                      disabled={predictionSaving}
+                      disabled={predictionSaving || predictionLoading}
                       className="primary-button justify-center disabled:opacity-50"
                     >
-                      {predictionSaving ? "Saving..." : "Save prediction"}
+                      {predictionSaving ? "Saving..." : "Save daily edge"}
                     </button>
-                    <button type="button" onClick={clearPredictionForm} className="secondary-button">
+                    <button type="button" onClick={clearDailyPickSlate} className="secondary-button">
                       Clear
                     </button>
                   </div>
@@ -780,7 +1033,7 @@ export default function AdminSecurePage() {
                             <div>
                               <div className="heading text-lg text-[color:var(--pure-white)]">{formatGameLabel(game)}</div>
                               <p className="mt-1 text-[11px] text-[color:var(--silver-gray)]">
-                                {formatGameTime(game.gameTimeEST)} EST • {game.status.toUpperCase()}
+                                {formatGameTime(game.gameTimeEST)} • {game.status.toUpperCase()}
                               </p>
                             </div>
                           </div>
@@ -833,30 +1086,38 @@ export default function AdminSecurePage() {
               <div className="admin-section__header">
                 <div>
                   <div className="admin-eyebrow">ARCHIVE</div>
-                  <h2 className="heading text-xl text-[color:var(--pure-white)]">Saved Predictions</h2>
+                  <h2 className="heading text-xl text-[color:var(--pure-white)]">Saved Slates</h2>
                 </div>
               </div>
 
               <div className="space-y-3 p-4">
-                {predictions.map((prediction) => (
-                  <div key={prediction.id} className={`admin-list-item ${selectedPredictionId === prediction.id ? "admin-list-item--active" : ""}`}>
+                {savedSlates.map((slate) => (
+                  <div key={slate.date} className={`admin-list-item ${predictionDate === slate.date ? "admin-list-item--active" : ""}`}>
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="mono text-sm text-[color:var(--pure-white)]">{prediction.date}</span>
-                        <span className="admin-pill">{prediction.source}</span>
-                        {prediction.isNoEdgeDay ? <span className="admin-pill admin-pill--alert">No Edge</span> : null}
+                        <span className="mono text-sm text-[color:var(--pure-white)]">{slate.date}</span>
+                        <span className="admin-pill">{slate.status}</span>
+                        {slate.isNoEdgeDay ? <span className="admin-pill admin-pill--alert">PASS</span> : null}
                       </div>
                       <p className="text-[11px] leading-5 text-[color:var(--silver-gray)]">
-                        {prediction.teaserText || "No teaser text"}
+                        {slate.isNoEdgeDay
+                          ? "No edge / pass day."
+                          : slate.pickCount > 0
+                            ? `${slate.pickCount} pick${slate.pickCount === 1 ? "" : "s"} saved.`
+                            : "Pending slate."}
                       </p>
                     </div>
 
                     <div className="mt-3 flex gap-2">
-                      <button type="button" onClick={() => selectPrediction(prediction)} className="secondary-button">
-                        Edit
-                      </button>
-                      <button type="button" onClick={() => deletePrediction(prediction.id)} className="admin-delete-button">
-                        Delete
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPredictionDate(slate.date);
+                          setActiveTab("predictions");
+                        }}
+                        className="secondary-button"
+                      >
+                        Load
                       </button>
                     </div>
                   </div>
@@ -878,6 +1139,7 @@ export default function AdminSecurePage() {
             <div className="space-y-5 p-6">
               <p className="admin-help">
                 Enter one message per line. The public ticker rotates them in sequence and slows down automatically when more messages are present.
+                The track record summary line is prepended automatically when it exists.
               </p>
 
               <div>
@@ -904,6 +1166,50 @@ export default function AdminSecurePage() {
                   {socialProofMessage}
                 </p>
               ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === "track" ? (
+          <section className="admin-section">
+            <div className="admin-section__header">
+              <div>
+                <div className="admin-eyebrow">TRUST LAYER</div>
+                <h2 className="heading text-xl text-[color:var(--pure-white)]">Track Record</h2>
+              </div>
+            </div>
+
+            <div className="space-y-5 p-6">
+              <p className="admin-help">
+                Track record now builds automatically from saved daily picks once each pick has `result` and `profitUnits`.
+                PASS days come from dates saved as No Edge.
+              </p>
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div>
+                  <label className="input-label" htmlFor="track-record-markdown">Auto-generated markdown</label>
+                  <textarea
+                    id="track-record-markdown"
+                    value={autoTrackRecordMarkdown || siteCopy.trackRecordMarkdown}
+                    readOnly
+                    rows={18}
+                    className="input-field mono mt-2 resize-y text-sm"
+                    placeholder="Track record will appear here after you log results on completed picks."
+                  />
+                </div>
+
+                <div>
+                  <label className="input-label">Preview</label>
+                  <div className="mt-2">
+                    <TrackRecord
+                      markdown={autoTrackRecordMarkdown || siteCopy.trackRecordMarkdown}
+                      showHeading={false}
+                      defaultExpanded
+                      emptyMessage="Track record preview populates automatically once results are entered."
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
         ) : null}
