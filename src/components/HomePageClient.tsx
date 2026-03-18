@@ -458,6 +458,16 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
           logging: false,
           imageTimeout: 4000,
           onclone: (documentClone) => {
+            // Tailwind v4 emits oklab()/color-mix() which html2canvas cannot parse.
+            // Patch all inline <style> blocks to replace unsupported color functions.
+            documentClone.querySelectorAll("style").forEach((styleEl) => {
+              if (styleEl.textContent) {
+                styleEl.textContent = styleEl.textContent
+                  .replace(/oklab\([^)]*\)/g, "rgba(139,146,165,0.5)")
+                  .replace(/color-mix\([^)]*\)/g, "rgba(139,146,165,0.5)");
+              }
+            });
+
             const clonedSurface = documentClone.getElementById("share-card-surface");
             if (clonedSurface instanceof HTMLElement) {
               clonedSurface.style.left = "0px";
