@@ -458,15 +458,52 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
           logging: false,
           imageTimeout: 4000,
           onclone: (documentClone) => {
-            // Tailwind v4 emits oklab()/color-mix() which html2canvas cannot parse.
-            // Patch all inline <style> blocks to replace unsupported color functions.
-            documentClone.querySelectorAll("style").forEach((styleEl) => {
-              if (styleEl.textContent) {
-                styleEl.textContent = styleEl.textContent
-                  .replace(/oklab\([^)]*\)/g, "rgba(139,146,165,0.5)")
-                  .replace(/color-mix\([^)]*\)/g, "rgba(139,146,165,0.5)");
-              }
-            });
+            // Tailwind v4 emits oklab()/color-mix() in both <style> and <link>
+            // stylesheets which html2canvas cannot parse. Nuke all stylesheets
+            // from the clone and inject only what the share card needs.
+            // The share card uses inline hex colors + basic Tailwind utilities.
+            documentClone.querySelectorAll('style, link[rel="stylesheet"]').forEach((el) => el.remove());
+
+            const patchStyle = documentClone.createElement("style");
+            patchStyle.textContent = `
+              *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+              body { font-family: 'Inter', sans-serif; color: #f5f5f3; background: #0a0e1a; -webkit-font-smoothing: antialiased; }
+              .heading { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.045em; }
+              .mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+              .markdown-content p + p { margin-top: 0.65rem; }
+              /* Tailwind utilities used by ShareCard */
+              .fixed { position: fixed; } .relative { position: relative; } .absolute { position: absolute; }
+              .overflow-hidden { overflow: hidden; } .pointer-events-none { pointer-events: none; }
+              .flex { display: flex; } .inline-flex { display: inline-flex; } .grid { display: grid; }
+              .items-center { align-items: center; } .justify-between { justify-content: space-between; }
+              .gap-2 { gap: 0.5rem; } .gap-3 { gap: 0.75rem; }
+              .space-y-3 > * + * { margin-top: 0.75rem; }
+              .p-0 { padding: 0; } .p-3 { padding: 0.75rem; } .p-5 { padding: 1.25rem; } .p-8 { padding: 2rem; }
+              .px-2\\.5 { padding-left: 0.625rem; padding-right: 0.625rem; }
+              .px-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
+              .py-0\\.5 { padding-top: 0.125rem; padding-bottom: 0.125rem; }
+              .py-1\\.5 { padding-top: 0.375rem; padding-bottom: 0.375rem; }
+              .pb-5 { padding-bottom: 1.25rem; } .pt-4 { padding-top: 1rem; }
+              .mt-6 { margin-top: 1.5rem; } .mb-1 { margin-bottom: 0.25rem; }
+              .mb-3 { margin-bottom: 0.75rem; } .mb-4 { margin-bottom: 1rem; }
+              .w-\\[760px\\] { width: 760px; } .w-28 { width: 7rem; } .h-28 { height: 7rem; } .h-1 { height: 0.25rem; }
+              .w-full { width: 100%; } .h-auto { height: auto; }
+              .top-0 { top: 0; } .top-20 { top: 5rem; } .right-8 { right: 2rem; }
+              .z-0 { z-index: 0; }
+              .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+              .text-xs { font-size: 0.75rem; line-height: 1rem; }
+              .text-2xl { font-size: 1.5rem; line-height: 2rem; }
+              .text-base { font-size: 1rem; line-height: 1.5rem; }
+              .text-\\[10px\\] { font-size: 10px; }
+              .font-bold { font-weight: 700; } .font-semibold { font-weight: 600; } .font-medium { font-weight: 500; }
+              .uppercase { text-transform: uppercase; }
+              .tracking-widest { letter-spacing: 0.1em; } .tracking-wider { letter-spacing: 0.05em; }
+              .rounded-xl { border-radius: 0.75rem; } .rounded-lg { border-radius: 0.5rem; } .rounded-full { border-radius: 9999px; }
+              .border { border-width: 1px; border-style: solid; } .border-t { border-top-width: 1px; border-top-style: solid; } .border-b { border-bottom-width: 1px; border-bottom-style: solid; }
+              .opacity-\\[0\\.08\\] { opacity: 0.08; }
+              .bg-gradient-to-r { background-image: linear-gradient(to right, var(--tw-gradient-from, transparent), var(--tw-gradient-to, transparent)); }
+            `;
+            documentClone.head.appendChild(patchStyle);
 
             const clonedSurface = documentClone.getElementById("share-card-surface");
             if (clonedSurface instanceof HTMLElement) {
