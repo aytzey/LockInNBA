@@ -42,6 +42,7 @@ export default function ChatModal({
   const [chatQuestionsRemaining, setChatQuestionsRemaining] = useState(0);
   const [chatInput, setChatInput] = useState("");
   const [isChatBusy, setIsChatBusy] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
   const [chatError, setChatError] = useState("");
   const [isInitializing, setIsInitializing] = useState(true);
   const [leadEmail, setLeadEmail] = useState("");
@@ -340,7 +341,7 @@ export default function ChatModal({
 
   async function sendChatMessage() {
     const messageToSend = chatInput.trim();
-    if (!chatSession || !messageToSend) return;
+    if (!chatSession || !messageToSend || isChatBusy) return;
     if (chatQuestionsRemaining <= 0 && chatSession.isPaid) { setChatError("Question limit reached."); return; }
     if (!chatSession.isPaid) {
       setPendingQuestion(messageToSend);
@@ -366,8 +367,21 @@ export default function ChatModal({
       return;
     }
 
+    // Optimistic: show user message immediately, clear input, lock send
     setIsChatBusy(true);
     setChatError("");
+    setStreamingText("");
+    const optimisticUserMsg: ChatMessage = {
+      id: `_opt_${Date.now()}`,
+      chatSessionId: activeSession.id,
+      role: "user",
+      content: message,
+      createdAt: new Date().toISOString(),
+    };
+    setChatMessages((prev) => [...prev, optimisticUserMsg]);
+    setChatInput("");
+    setPendingQuestion("");
+
     try {
       const res = await fetch("/api/chat/message", {
         method: "POST",
@@ -381,22 +395,64 @@ export default function ChatModal({
           email: leadEmail.trim().toLowerCase() || undefined,
         }),
       });
-      const data = await res.json();
+
+      // Non-streaming error responses (402, 4xx, 5xx)
       if (res.status === 402) {
-        setChatError(data.message || "Payment required.");
+        const data = await res.json().catch(() => null);
+        setChatError(data?.message || "Payment required.");
         await refreshChatSession(activeSession.id);
         return;
       }
-      if (!res.ok) throw new Error(data.message || "Chat request failed.");
-      setChatMessages(data.messages as ChatMessage[]);
-      onMessagesChange(data.messages as ChatMessage[]);
-      setChatQuestionsRemaining(data.questionsRemaining ?? 0);
-      setChatInput("");
-      setPendingQuestion("");
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message || "Chat request failed.");
+      }
+
+      // Read the NDJSON stream
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response stream.");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulated = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+
+          try {
+            const event = JSON.parse(trimmed) as { t: string; c?: string; questionsRemaining?: number; messages?: ChatMessage[] };
+
+            if (event.t === "d" && event.c) {
+              accumulated += event.c;
+              setStreamingText(accumulated);
+            } else if (event.t === "done") {
+              if (Array.isArray(event.messages)) {
+                setChatMessages(event.messages);
+                onMessagesChange(event.messages);
+              }
+              if (typeof event.questionsRemaining === "number") {
+                setChatQuestionsRemaining(event.questionsRemaining);
+              }
+            }
+          } catch {
+            // skip malformed lines
+          }
+        }
+      }
     } catch (error) {
       setChatError(error instanceof Error ? error.message : "Network error.");
     } finally {
       setIsChatBusy(false);
+      setStreamingText("");
     }
   }
 
@@ -426,7 +482,7 @@ export default function ChatModal({
 
   const isPaid = chatSession?.isPaid ?? false;
   const questionLimit = chatSession?.questionLimit ?? 0;
-  const canSend = !isInitializing && !isChatBusy && (!isPaid || chatQuestionsRemaining > 0);
+  const canSend = !isInitializing && !isChatBusy && !isUnlockingQuestion && (!isPaid || chatQuestionsRemaining > 0);
 
   return (
     <motion.div
@@ -560,22 +616,29 @@ export default function ChatModal({
               className="rounded-[1.35rem] border border-[color:var(--line)] bg-[color:var(--panel-soft)] p-4"
             >
               <div className="mono mb-2 flex items-center gap-1.5 text-[11px]">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--gold)]" />
+                <motion.span
+                  className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--gold)]"
+                  animate={{ opacity: [1, 0.4, 1] }}
+                  transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                />
                 <span className="text-[color:var(--silver-gray)]">LOCKIN AI</span>
               </div>
-              <div className="flex items-center gap-2 text-sm text-[color:var(--silver-gray)]">
-                <div className="flex gap-1">
-                  {[0, 1, 2].map((i) => (
-                    <motion.span
-                      key={i}
-                      className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--money-green)]"
-                      animate={{ y: [0, -6, 0] }}
-                      transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
+              {streamingText ? (
+                <MarkdownContent content={streamingText} className="text-sm" />
+              ) : (
+                <div className="flex items-center gap-3 text-sm text-[color:var(--silver-gray)]">
+                  <motion.div
+                    className="relative h-1 w-16 overflow-hidden rounded-full bg-[color:var(--line)]"
+                  >
+                    <motion.div
+                      className="absolute inset-y-0 left-0 w-8 rounded-full bg-[color:var(--money-green)]"
+                      animate={{ x: ["-100%", "200%"] }}
+                      transition={{ duration: 1.1, repeat: Infinity, ease: [0.22, 1, 0.36, 1] }}
                     />
-                  ))}
+                  </motion.div>
+                  Scanning matchup data...
                 </div>
-                Building the matchup read...
-              </div>
+              )}
             </motion.div>
           )}
 

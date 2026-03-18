@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateMatchResponse } from "@/lib/llm";
+import { generateMatchResponseStream } from "@/lib/llm";
 import {
   addChatMessage,
   consumeChatQuestion,
@@ -91,21 +91,52 @@ export async function POST(request: NextRequest) {
   await addChatMessage(sessionId, "user", question);
   const priorMessages = await getChatMessages(sessionId);
 
-  const answer = await generateMatchResponse({
-    question,
-    game,
-    matchMarkdown: matchMarkdown?.markdownContent || "",
-    chatHistory: priorMessages,
-    unlockedPrediction: Boolean(updatedSession.isPaid),
-    systemPrompt: (await getActiveSystemPrompt()).content,
-    isFirstAnswer: updatedSession.questionsUsed === 1,
-  });
-  const assistantMessage = await addChatMessage(sessionId, "assistant", answer);
+  const systemPrompt = (await getActiveSystemPrompt()).content;
+  const questionsRemaining = Math.max(0, updatedSession.questionLimit - updatedSession.questionsUsed);
 
-  return NextResponse.json({
-    assistantMessage,
-    messages: await getChatMessages(sessionId),
-    questionsRemaining: Math.max(0, updatedSession.questionLimit - updatedSession.questionsUsed),
-    isLocked: !(await hasChatCapacity(sessionId)),
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      let fullResponse = "";
+
+      for await (const chunk of generateMatchResponseStream({
+        question,
+        game,
+        matchMarkdown: matchMarkdown?.markdownContent || "",
+        chatHistory: priorMessages,
+        unlockedPrediction: Boolean(updatedSession.isPaid),
+        systemPrompt,
+        isFirstAnswer: updatedSession.questionsUsed === 1,
+      })) {
+        fullResponse += chunk;
+        controller.enqueue(encoder.encode(JSON.stringify({ t: "d", c: chunk }) + "\n"));
+      }
+
+      // Save assistant message to DB
+      await addChatMessage(sessionId, "assistant", fullResponse);
+      const allMessages = await getChatMessages(sessionId);
+
+      // Send final metadata
+      controller.enqueue(
+        encoder.encode(
+          JSON.stringify({
+            t: "done",
+            questionsRemaining,
+            messages: allMessages,
+            isLocked: !(await hasChatCapacity(sessionId)),
+          }) + "\n",
+        ),
+      );
+
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson",
+      "Cache-Control": "no-cache, no-store",
+      "Transfer-Encoding": "chunked",
+    },
   });
 }

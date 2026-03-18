@@ -60,6 +60,75 @@ function readTextContent(content: OpenRouterContent | undefined): string {
 }
 
 const LLM_FETCH_TIMEOUT_MS = 15_000;
+const LLM_STREAM_TIMEOUT_MS = 30_000;
+
+async function* callOpenRouterStream(
+  messages: ModelMessage[],
+  options?: { maxTokens?: number; temperature?: number },
+): AsyncGenerator<string> {
+  const config = getOpenRouterConfig();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), LLM_STREAM_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": config.siteUrl,
+        "X-Title": config.siteName,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages,
+        max_tokens: options?.maxTokens ?? 500,
+        temperature: options?.temperature ?? 0.4,
+        stream: true,
+      }),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenRouter stream failed with ${response.status}`);
+    }
+
+    if (!response.body) {
+      throw new Error("No response body for stream");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data: ")) continue;
+        const data = trimmed.slice(6);
+        if (data === "[DONE]") return;
+
+        try {
+          const parsed = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> };
+          const content = parsed.choices?.[0]?.delta?.content;
+          if (content) yield content;
+        } catch {
+          // skip malformed SSE chunks
+        }
+      }
+    }
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 async function callOpenRouter(messages: ModelMessage[], options?: { maxTokens?: number; temperature?: number }): Promise<string> {
   const config = getOpenRouterConfig();
@@ -121,7 +190,7 @@ function extractJsonObject(source: string): Record<string, unknown> | null {
   }
 }
 
-function buildHeuristicMatchResponse(input: MatchResponseInput): string {
+export function buildHeuristicMatchResponse(input: MatchResponseInput): string {
   const favoriteIsHome = Math.abs(input.game.homeMoneyline) >= Math.abs(input.game.awayMoneyline);
   const favoriteTeam = favoriteIsHome ? input.game.homeTeam : input.game.awayTeam;
   const favoriteRecord = favoriteIsHome ? input.game.homeRecord : input.game.awayRecord;
@@ -153,7 +222,7 @@ function buildHeuristicMatchResponse(input: MatchResponseInput): string {
   ].join("\n");
 }
 
-export async function generateMatchResponse(input: MatchResponseInput): Promise<string> {
+function buildMatchMessages(input: MatchResponseInput): ModelMessage[] {
   const hasEngineRead = input.matchMarkdown.trim().length > 0;
   const recentHistory = input.chatHistory
     .slice(-6)
@@ -194,16 +263,25 @@ export async function generateMatchResponse(input: MatchResponseInput): Promise<
     "Important: answer only from the matchup context above.",
   ].join("\n");
 
+  return [
+    { role: "system" as const, content: systemMessage },
+    { role: "user" as const, content: userMessage },
+  ];
+}
+
+export async function generateMatchResponse(input: MatchResponseInput): Promise<string> {
   try {
-    return await callOpenRouter(
-      [
-        { role: "system", content: systemMessage },
-        { role: "user", content: userMessage },
-      ],
-      { maxTokens: 420, temperature: 0.35 },
-    );
+    return await callOpenRouter(buildMatchMessages(input), { maxTokens: 420, temperature: 0.35 });
   } catch {
     return buildHeuristicMatchResponse(input);
+  }
+}
+
+export async function* generateMatchResponseStream(input: MatchResponseInput): AsyncGenerator<string> {
+  try {
+    yield* callOpenRouterStream(buildMatchMessages(input), { maxTokens: 420, temperature: 0.35 });
+  } catch {
+    yield buildHeuristicMatchResponse(input);
   }
 }
 
