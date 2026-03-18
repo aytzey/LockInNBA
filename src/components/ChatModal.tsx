@@ -527,7 +527,7 @@ export default function ChatModal({
         <div
           className="relative flex-shrink-0 border-b border-[color:var(--line)] px-4 py-4 md:px-5"
           style={{
-            background: "linear-gradient(140deg, color-mix(in oklab, var(--panel-strong) 80%, transparent), color-mix(in oklab, var(--accent-soft) 18%, transparent))",
+            background: "linear-gradient(140deg, rgba(11, 16, 28, 0.78), rgba(0, 200, 83, 0.04))",
           }}
         >
           <div className="flex items-center justify-between">
