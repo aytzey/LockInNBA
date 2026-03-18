@@ -543,11 +543,11 @@ export default function ChatModal({
           </div>
         </div>
 
-        <div className="flex-1 space-y-2.5 overflow-y-auto overscroll-contain px-3 py-3 md:space-y-3 md:px-4 md:py-4">
+        <div className="flex-1 space-y-2.5 overflow-y-auto overscroll-contain px-3 py-3 md:space-y-3 md:px-4 md:py-4" role="log" aria-live="polite">
           {isInitializing ? (
             <div className="flex flex-col items-center justify-center py-12">
               <motion.div
-                className="h-8 w-8 rounded-full border-2 border-[#00c853]/30 border-t-[#00c853]"
+                className="h-8 w-8 rounded-full border-2 border-[color:var(--money-green)]/30 border-t-[color:var(--money-green)]"
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
               />
@@ -564,11 +564,11 @@ export default function ChatModal({
                 animate={{ scale: [1, 1.05, 1] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
-                <svg className="h-6 w-6 text-[#00c853]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <svg className="h-6 w-6 text-[color:var(--money-green)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               </motion.div>
-              <p className="mb-1 text-sm font-medium text-white">Ready to analyze this matchup</p>
+              <p className="mb-1 text-sm font-medium text-[color:var(--pure-white)]">Ready to analyze this matchup</p>
               <p className="max-w-sm text-[11px] leading-5 text-[color:var(--silver-gray)]">
                 {isPaid
                   ? "Ask about this specific matchup. Each game keeps its own running question count."
@@ -604,7 +604,7 @@ export default function ChatModal({
               {message.role === "assistant" ? (
                 <MarkdownContent content={message.content} className="text-sm" />
               ) : (
-                <div className="text-sm leading-relaxed text-[#f5f5f3] whitespace-pre-wrap">{message.content}</div>
+                <div className="text-sm leading-relaxed text-[color:var(--pure-white)] whitespace-pre-wrap">{message.content}</div>
               )}
             </motion.div>
           ))}

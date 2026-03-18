@@ -50,7 +50,7 @@ export function GameSkeleton({ delay = 0 }: { delay?: number }) {
 
 export function GameListSkeleton() {
   return (
-    <div className="space-y-3 md:space-y-5">
+    <div className="space-y-3 md:space-y-5" aria-busy="true" aria-label="Loading matchups">
       {Array.from({ length: 4 }).map((_, i) => (
         <GameSkeleton key={i} delay={i * 80} />
       ))}

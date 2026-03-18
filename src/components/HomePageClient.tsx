@@ -180,8 +180,7 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
       }
 
       return body;
-    } catch (err) {
-      console.warn("[LOCKIN] fetchGames failed:", err);
+    } catch {
       return null;
     }
   }, []);
@@ -359,11 +358,9 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
     }
 
     const delayMs = retryCountRef.current === 0 ? 1500 : 4000;
-    const attempt = retryCountRef.current;
     retryCountRef.current += 1;
 
     const timeoutId = window.setTimeout(async () => {
-      console.warn(`[LOCKIN] auto-retry ${attempt + 1}/2 for empty board`);
       const result = await fetchGames();
       const loaded = Array.isArray(result?.games) && result.games.length > 0;
       if (!loaded && retryCountRef.current >= 2) {
@@ -619,7 +616,7 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
               <p className="empty-board-card__body">Tap below to try again.</p>
               <button
                 onClick={handleRetry}
-                className="mt-4 rounded-xl bg-[color:var(--money-green)] px-6 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+                className="focus-ring mt-4 rounded-xl bg-[color:var(--money-green)] px-6 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90"
               >
                 Retry
               </button>

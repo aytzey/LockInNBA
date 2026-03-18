@@ -41,12 +41,12 @@ export default function GameCard({ game, onOpenChat, promoActive = false }: Game
         <div className="min-w-0 flex-1">
           <div className="game-card__identity-row">
             <div className="game-card__identity-team">
-              <img src={game.awayLogo} alt="" className="game-card__logo" loading="lazy" />
+              <img src={game.awayLogo} alt={game.awayTeam} className="game-card__logo" loading="lazy" />
               <span className="heading game-card__identity-code">{game.awayTeam}</span>
             </div>
             <span className="game-card__identity-separator">@</span>
             <div className="game-card__identity-team">
-              <img src={game.homeLogo} alt="" className="game-card__logo" loading="lazy" />
+              <img src={game.homeLogo} alt={game.homeTeam} className="game-card__logo" loading="lazy" />
               <span className="heading game-card__identity-code">{game.homeTeam}</span>
             </div>
           </div>
