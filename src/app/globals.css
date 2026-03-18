@@ -1001,6 +1001,15 @@ textarea:-webkit-autofill {
   gap: 0;
 }
 
+.daily-pick-card--compact {
+  display: grid;
+  gap: 0;
+  border-radius: 1.15rem;
+  border: 1px solid var(--line);
+  background: rgba(12, 18, 30, 0.7);
+  padding: 1.1rem;
+}
+
 .daily-pick-card__badge {
   display: inline-flex;
   align-items: center;

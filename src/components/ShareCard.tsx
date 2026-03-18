@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef } from "react";
-import type { Game, ChatMessage } from "./types";
+import type { Game, ChatMessage, DailyPick } from "./types";
 import { moneyline } from "./utils";
 import { LockinBrand, LockinMark } from "./LockinBrand";
 import MarkdownContent from "./MarkdownContent";
@@ -10,12 +10,13 @@ interface ShareCardProps {
   mode: "daily" | "chat";
   headline: string;
   dailyMarkdown: string;
+  dailyPicks: DailyPick[];
   selectedGame: Game | null;
   chatMessages: ChatMessage[];
 }
 
 const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
-  { mode, headline, dailyMarkdown, selectedGame, chatMessages },
+  { mode, headline, dailyMarkdown, dailyPicks, selectedGame, chatMessages },
   ref,
 ) {
   return (
@@ -41,9 +42,47 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
             <div className="mb-1 text-[10px] font-medium uppercase tracking-widest text-[#00c853]">Tonight&apos;s Edge</div>
             <div className="heading mb-3 text-2xl font-bold text-[#f5f5f3]">LOCKIN Daily Edge</div>
             <div className="mb-4 text-sm text-[#8b92a5]">{headline}</div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
-              <MarkdownContent content={dailyMarkdown} className="text-sm" />
-            </div>
+
+            {dailyPicks.length > 0 ? (
+              <div className="space-y-3">
+                {dailyPicks.map((pick) => {
+                  if (!pick.game) return null;
+                  const awayPicked = pick.pickedSide === "away";
+                  const homePicked = pick.pickedSide === "home";
+                  return (
+                    <div key={pick.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-base font-semibold text-[#f5f5f3]">
+                          <span>{pick.game.awayTeam}</span>
+                          <span className="text-xs text-[#8b92a5]">@</span>
+                          <span>{pick.game.homeTeam}</span>
+                        </div>
+                        <span className="rounded-full border border-[#00c853]/20 bg-[#00c853]/[0.08] px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#00c853]">
+                          pick
+                        </span>
+                      </div>
+                      <div className="mb-3 flex gap-2">
+                        <span className={`mono rounded-lg border px-3 py-1.5 text-sm ${awayPicked ? "border-[#00c853]/30 bg-[#00c853]/[0.08] text-[#00c853]" : "border-white/10 bg-white/[0.04] text-[#f5f5f3]"}`}>
+                          {pick.game.awayTeam} {moneyline(pick.game.awayMoneyline)}
+                          {awayPicked ? " ←" : ""}
+                        </span>
+                        <span className={`mono rounded-lg border px-3 py-1.5 text-sm ${homePicked ? "border-[#00c853]/30 bg-[#00c853]/[0.08] text-[#00c853]" : "border-white/10 bg-white/[0.04] text-[#f5f5f3]"}`}>
+                          {pick.game.homeTeam} {moneyline(pick.game.homeMoneyline)}
+                          {homePicked ? " ←" : ""}
+                        </span>
+                      </div>
+                      {pick.analysisMarkdown.trim() ? (
+                        <MarkdownContent content={pick.analysisMarkdown} className="text-sm" />
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : dailyMarkdown.trim() ? (
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
+                <MarkdownContent content={dailyMarkdown} className="text-sm" />
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="relative mt-6">

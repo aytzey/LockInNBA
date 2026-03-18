@@ -468,7 +468,7 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
         new Promise<never>((_, reject) => {
           window.setTimeout(() => {
             reject(new Error("Share card couldn't be generated. Please try again."));
-          }, 5000);
+          }, 12000);
         }),
       ]);
 
@@ -698,6 +698,7 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
           mode={shareMode}
           headline={dailyShareHeadline}
           dailyMarkdown={dailyMarkdown}
+          dailyPicks={dailyUnlockedPicks}
           selectedGame={selectedGame}
           chatMessages={chatMessages}
         />

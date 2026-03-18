@@ -198,9 +198,9 @@ function TonightsEdgeContent({
             </div>
 
             {unlockedPicks.length > 0 ? (
-              <div className="grid gap-3 md:gap-5 xl:grid-cols-2">
+              <div className="grid gap-3 md:gap-4">
                 {unlockedPicks.map((pick) => (
-                  <DailyPickCard key={pick.id} pick={pick} />
+                  <DailyPickCard key={pick.id} pick={pick} compact />
                 ))}
               </div>
             ) : (

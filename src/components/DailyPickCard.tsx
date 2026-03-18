@@ -8,9 +8,10 @@ import { formatEstTime, moneyline } from "./utils";
 interface DailyPickCardProps {
   pick: DailyPick;
   showResultMeta?: boolean;
+  compact?: boolean;
 }
 
-export default function DailyPickCard({ pick, showResultMeta = false }: DailyPickCardProps) {
+export default function DailyPickCard({ pick, showResultMeta = false, compact = false }: DailyPickCardProps) {
   if (!pick.game) {
     return null;
   }
@@ -30,7 +31,7 @@ export default function DailyPickCard({ pick, showResultMeta = false }: DailyPic
       : null;
 
   return (
-    <article className="game-card daily-pick-card">
+    <article className={compact ? "daily-pick-card daily-pick-card--compact" : "game-card daily-pick-card"}>
       <div className="flex items-start justify-between gap-3 md:gap-4">
         <div className="min-w-0 flex-1">
           <div className="game-card__identity-row">
