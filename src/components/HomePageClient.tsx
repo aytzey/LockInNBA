@@ -91,6 +91,7 @@ interface HomePageClientProps {
 export default function HomePageClient({ initialData }: HomePageClientProps) {
   const shareCardRef = useRef<HTMLDivElement>(null);
   const gameSectionRef = useRef<HTMLDivElement>(null);
+  const trackRecordRef = useRef<HTMLDivElement>(null);
   const retryCountRef = useRef(0);
   const sharePreviewUrlRef = useRef<string | null>(null);
 
@@ -573,7 +574,18 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
 
         <SocialProofBanner messages={effectiveSocialProofMessages} />
 
-        <TrackRecord markdown={siteCopy.trackRecordMarkdown} />
+        {siteCopy.trackRecordMarkdown.trim() ? (
+          <button
+            type="button"
+            onClick={() => trackRecordRef.current?.scrollIntoView({ behavior: "smooth" })}
+            className="focus-ring mx-auto flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-4 py-2 text-[11px] uppercase tracking-[0.16em] text-[color:var(--silver-gray)] transition hover:border-[color:var(--money-green-line)] hover:text-[color:var(--money-green)]"
+          >
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+            Show Track Record
+          </button>
+        ) : null}
 
         <TonightsEdge
           prediction={todayPrediction}
@@ -661,6 +673,10 @@ export default function HomePageClient({ initialData }: HomePageClientProps) {
             </div>
           )}
         </section>
+
+        <div ref={trackRecordRef}>
+          <TrackRecord markdown={siteCopy.trackRecordMarkdown} />
+        </div>
 
         <RestoreAccess onRestore={unlockDailyPrediction} footerDisclaimer={siteCopy.footerDisclaimer} />
 
