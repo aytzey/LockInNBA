@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
   const sessionId = (body?.sessionId || "") as string;
   const question = (body?.message || "").toString().trim();
   const claimedEmail = (body?.email || "").toLowerCase().trim();
+  const wantStream = (body?.stream ?? true) as boolean;
 
   if (!sessionId) {
     return NextResponse.json({ message: "sessionId is required" }, { status: 400 });
@@ -94,49 +95,74 @@ export async function POST(request: NextRequest) {
   const systemPrompt = (await getActiveSystemPrompt()).content;
   const questionsRemaining = Math.max(0, updatedSession.questionLimit - updatedSession.questionsUsed);
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      let fullResponse = "";
+  const streamInput = {
+    question,
+    game,
+    matchMarkdown: matchMarkdown?.markdownContent || "",
+    chatHistory: priorMessages,
+    unlockedPrediction: Boolean(updatedSession.isPaid),
+    systemPrompt,
+    isFirstAnswer: updatedSession.questionsUsed === 1,
+  };
 
-      for await (const chunk of generateMatchResponseStream({
-        question,
-        game,
-        matchMarkdown: matchMarkdown?.markdownContent || "",
-        chatHistory: priorMessages,
-        unlockedPrediction: Boolean(updatedSession.isPaid),
-        systemPrompt,
-        isFirstAnswer: updatedSession.questionsUsed === 1,
-      })) {
-        fullResponse += chunk;
-        controller.enqueue(encoder.encode(JSON.stringify({ t: "d", c: chunk }) + "\n"));
-      }
+  // Streaming path: NDJSON deltas + done event
+  if (wantStream) {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          let fullResponse = "";
 
-      // Save assistant message to DB
-      await addChatMessage(sessionId, "assistant", fullResponse);
-      const allMessages = await getChatMessages(sessionId);
+          for await (const chunk of generateMatchResponseStream(streamInput)) {
+            fullResponse += chunk;
+            controller.enqueue(encoder.encode(JSON.stringify({ t: "d", c: chunk }) + "\n"));
+          }
 
-      // Send final metadata
-      controller.enqueue(
-        encoder.encode(
-          JSON.stringify({
-            t: "done",
-            questionsRemaining,
-            messages: allMessages,
-            isLocked: !(await hasChatCapacity(sessionId)),
-          }) + "\n",
-        ),
-      );
+          await addChatMessage(sessionId, "assistant", fullResponse);
+          const allMessages = await getChatMessages(sessionId);
 
-      controller.close();
-    },
-  });
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({
+                t: "done",
+                questionsRemaining,
+                messages: allMessages,
+                isLocked: !(await hasChatCapacity(sessionId)),
+              }) + "\n",
+            ),
+          );
+        } catch {
+          // If streaming itself fails, send error event
+          controller.enqueue(
+            encoder.encode(JSON.stringify({ t: "error", message: "Stream interrupted" }) + "\n"),
+          );
+        } finally {
+          controller.close();
+        }
+      },
+    });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "application/x-ndjson",
-      "Cache-Control": "no-cache, no-store",
-      "Transfer-Encoding": "chunked",
-    },
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson",
+        "Cache-Control": "no-cache, no-store",
+      },
+    });
+  }
+
+  // Buffered fallback: collect full response then return JSON
+  let fullResponse = "";
+  for await (const chunk of generateMatchResponseStream(streamInput)) {
+    fullResponse += chunk;
+  }
+
+  const assistantMessage = await addChatMessage(sessionId, "assistant", fullResponse);
+  const allMessages = await getChatMessages(sessionId);
+
+  return NextResponse.json({
+    assistantMessage,
+    messages: allMessages,
+    questionsRemaining,
+    isLocked: !(await hasChatCapacity(sessionId)),
   });
 }

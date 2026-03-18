@@ -392,11 +392,12 @@ export default function ChatModal({
         body: JSON.stringify({
           sessionId: activeSession.id,
           message,
+          stream: true,
           email: leadEmail.trim().toLowerCase() || undefined,
         }),
       });
 
-      // Non-streaming error responses (402, 4xx, 5xx)
+      // Error responses (402, 4xx, 5xx) come as JSON regardless
       if (res.status === 402) {
         const data = await res.json().catch(() => null);
         setChatError(data?.message || "Payment required.");
@@ -408,7 +409,22 @@ export default function ChatModal({
         throw new Error(data?.message || "Chat request failed.");
       }
 
-      // Read the NDJSON stream
+      const contentType = res.headers.get("content-type") || "";
+
+      // Buffered JSON fallback (when streaming isn't available)
+      if (contentType.includes("application/json")) {
+        const data = await res.json();
+        if (Array.isArray(data.messages)) {
+          setChatMessages(data.messages as ChatMessage[]);
+          onMessagesChange(data.messages as ChatMessage[]);
+        }
+        if (typeof data.questionsRemaining === "number") {
+          setChatQuestionsRemaining(data.questionsRemaining);
+        }
+        return;
+      }
+
+      // Streaming NDJSON path
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No response stream.");
 
@@ -429,7 +445,7 @@ export default function ChatModal({
           if (!trimmed) continue;
 
           try {
-            const event = JSON.parse(trimmed) as { t: string; c?: string; questionsRemaining?: number; messages?: ChatMessage[] };
+            const event = JSON.parse(trimmed) as { t: string; c?: string; questionsRemaining?: number; messages?: ChatMessage[]; message?: string };
 
             if (event.t === "d" && event.c) {
               accumulated += event.c;
@@ -442,9 +458,15 @@ export default function ChatModal({
               if (typeof event.questionsRemaining === "number") {
                 setChatQuestionsRemaining(event.questionsRemaining);
               }
+            } else if (event.t === "error") {
+              throw new Error(event.message || "Stream interrupted.");
             }
-          } catch {
-            // skip malformed lines
+          } catch (parseErr) {
+            if (parseErr instanceof Error && parseErr.message !== "Stream interrupted.") {
+              // skip malformed JSON lines
+              continue;
+            }
+            throw parseErr;
           }
         }
       }
