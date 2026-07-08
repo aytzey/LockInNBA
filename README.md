@@ -1,6 +1,14 @@
 # LOCKIN NBA
 
+**Live in production at lockinpicks.com — an LLM-powered NBA prediction SaaS shipped end-to-end: Next.js 16, OpenRouter, Supabase Postgres, serverless AWS Lambda/CloudFront.**
+
 LOCKIN is a Next.js app that surfaces a paid daily NBA moneyline edge and paid per-game AI matchup chat.
+
+## How the AI picks work
+
+- `src/lib/llm.ts` builds a slate context from live ESPN scoreboard data (teams, records, moneylines, spreads, totals) and asks an OpenRouter model for one best moneyline pick as strict JSON, or a "no-edge day" call.
+- Per-game chat sends only that game's context plus recent chat history to the model, streamed back as NDJSON deltas, with prompts that forbid inventing injuries, trends, or odds.
+- If the OpenRouter call fails, times out, or returns unparsable JSON, the app falls back to a deterministic heuristic built from the same live market data.
 
 ## What is live now
 
@@ -67,13 +75,13 @@ App tables also enable RLS during bootstrap and revoke `anon` / `authenticated` 
 - Daily predictions are still regenerated only for `source: "auto"` rows.
 - Admin-written daily predictions are not overwritten by automatic refreshes.
 - A protected manual sync endpoint still exists at `/api/internal/live-sync`.
-- Full setup notes live in [`docs/live-data-sync.md`](/home/aytzey/Desktop/lockin_nba/docs/live-data-sync.md).
-- Supabase persistence notes live in [`docs/supabase-postgres.md`](/home/aytzey/Desktop/lockin_nba/docs/supabase-postgres.md).
-- AWS deploy notes live in [`docs/aws-deploy.md`](/home/aytzey/Desktop/lockin_nba/docs/aws-deploy.md).
+- Full setup notes live in [`docs/live-data-sync.md`](docs/live-data-sync.md).
+- Supabase persistence notes live in [`docs/supabase-postgres.md`](docs/supabase-postgres.md).
+- AWS deploy notes live in [`docs/aws-deploy.md`](docs/aws-deploy.md).
 
 ## Deployment
 
-- Production deploys run from `main` through [`deploy-lambda.yml`](/home/aytzey/Desktop/lockin_nba/.github/workflows/deploy-lambda.yml).
+- Production deploys run from `main` through [`deploy-lambda.yml`](.github/workflows/deploy-lambda.yml).
 - The app ships as a Next.js standalone container image.
 - AWS Lambda Web Adapter runs that image behind CloudFront, so there is no always-on EC2 instance.
 - Production origin requests are guarded with a shared origin header so the raw Lambda Function URL is not meant to be used directly.

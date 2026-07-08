@@ -20,7 +20,7 @@ Lambda Web Adapter ayni Next.js standalone build'ini HTTP uygulamasi gibi Lambda
 - AWS Lambda Function URL: CloudFront origin'i
 - AWS CloudFront distribution: `lockinpicks.com` ve `www.lockinpicks.com` icin HTTPS edge katmani
 - AWS Route53 hosted zone: `lockinpicks.com`
-- GitHub Actions workflow: [deploy-lambda.yml](/home/aytzey/Desktop/lockin_nba/.github/workflows/deploy-lambda.yml)
+- GitHub Actions workflow: [deploy-lambda.yml](../.github/workflows/deploy-lambda.yml)
 
 Lambda Function URL public auth modunda kalsa bile origin seviyesinde CloudFront secret header korumasi kullanilir.
 Uygulama proxy katmani `x-lockin-origin-verify` header'ini bekler; bu header sadece CloudFront origin config'inde tanimlidir.

@@ -49,8 +49,8 @@ curl --fail \
 
 # İlgili Dosyalar
 
-- [src/app/api/internal/live-sync/route.ts](/home/aytzey/Desktop/lockin_nba/src/app/api/internal/live-sync/route.ts)
-- [src/lib/daily-edge.ts](/home/aytzey/Desktop/lockin_nba/src/lib/daily-edge.ts)
-- [src/lib/nba.ts](/home/aytzey/Desktop/lockin_nba/src/lib/nba.ts)
-- [src/lib/store.ts](/home/aytzey/Desktop/lockin_nba/src/lib/store.ts)
-- [src/lib/db.ts](/home/aytzey/Desktop/lockin_nba/src/lib/db.ts)
+- [src/app/api/internal/live-sync/route.ts](../src/app/api/internal/live-sync/route.ts)
+- [src/lib/daily-edge.ts](../src/lib/daily-edge.ts)
+- [src/lib/nba.ts](../src/lib/nba.ts)
+- [src/lib/store.ts](../src/lib/store.ts)
+- [src/lib/db.ts](../src/lib/db.ts)

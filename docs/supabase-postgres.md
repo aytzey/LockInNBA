@@ -74,6 +74,6 @@ node --env-file=.env -e "const { Client } = require('pg'); const client = new Cl
 
 # İlgili Dosyalar
 
-- [src/lib/db.ts](/home/aytzey/Desktop/lockin_nba/src/lib/db.ts)
-- [src/lib/store.ts](/home/aytzey/Desktop/lockin_nba/src/lib/store.ts)
-- [src/lib/daily-edge.ts](/home/aytzey/Desktop/lockin_nba/src/lib/daily-edge.ts)
+- [src/lib/db.ts](../src/lib/db.ts)
+- [src/lib/store.ts](../src/lib/store.ts)
+- [src/lib/daily-edge.ts](../src/lib/daily-edge.ts)
